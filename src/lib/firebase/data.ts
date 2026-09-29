@@ -752,8 +752,8 @@ export const DEFAULT_APP_CONFIG: Omit<AppConfig, 'id'> = {
     },
     geofence: {
         enabled: true,
-        center: { lat: 19.432608, lng: -99.133209 }, // Default Center (CDMX)
-        radius: 200
+        center: { lat: 19.0801094, lng: -98.8468597 }, // EPO 264
+        radius: 150
     },
     features: {
         badges: true,
