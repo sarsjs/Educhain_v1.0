@@ -18,10 +18,11 @@ export function calculateDistance(lat1: number, lon1: number, lat2: number, lon2
 }
 
 export const SCHOOL_LOCATION = {
-    latitude: 19.4326, // Example coordinates
+    // TODO(V1): replace with the real EPO 264 coordinates before enabling attendance GPS.
+    latitude: 19.4326,
     longitude: -99.1332,
-    radius: 150, // Perimeter in meters
-    name: "Plantel Educativo"
+    radius: 150,
+    name: "CONFIGURAR UBICACIÓN DEL PLANTEL"
 };
 
 export interface LocationScanResult {
