@@ -379,10 +379,14 @@ export const fetchTimetableByTeacher = async (teacherId: string): Promise<Timeta
 };
 
 // Functions for the unified user model
-export const fetchStudents = async (): Promise<User[]> => {
-    const allUsers = await fetchUsers();
-    return allUsers.filter(user => user.role === 'estudiante' || user.role === 'alumno');
-};
+export const fetchStudents = async (): Promise<User[]> => fetchData(async () => {
+    const q = query(
+        collection(db, "users"),
+        where("role", "in", ["estudiante", "alumno"])
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as User));
+}, 'students');
 
 export const fetchStudentsByGroup = async (groupId: string): Promise<User[]> => {
     const allStudents = await fetchStudents();
