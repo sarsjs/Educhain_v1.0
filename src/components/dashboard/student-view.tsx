@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/context/auth-context";
 import { IdCard } from "@/components/dashboard/id-card";
 import {
-  fetchStudentByEmail,
+  fetchUserById,
   fetchSubjects,
   fetchTimetableByGroup,
   fetchAttendanceByStudent,
@@ -68,7 +68,7 @@ export function StudentView() {
     setFetching(true);
     try {
       const [record, subjectsData] = await Promise.all([
-        fetchStudentByEmail(profile.email),
+        fetchUserById(profile.id),
         fetchSubjects(),
       ]);
 
@@ -98,7 +98,7 @@ export function StudentView() {
     } finally {
       setFetching(false);
     }
-  }, [profile?.email, toast]);
+  }, [profile?.id, toast]);
 
   React.useEffect(() => {
     loadData();
