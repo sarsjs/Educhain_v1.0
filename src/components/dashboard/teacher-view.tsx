@@ -15,10 +15,10 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/context/auth-context";
 import { IdCard } from "@/components/dashboard/id-card";
 import {
-  fetchSubjects,
-  fetchStudents,
-  fetchGroups,
-  fetchAllTimetables,
+  fetchSubjectsByTeacher,
+  fetchStudentsByGroup,
+  fetchGroupById,
+  fetchTimetableBySubject,
   fetchAttendanceForDate,
   generateAttendanceToken,
 } from "@/lib/firebase/data";
@@ -62,26 +62,25 @@ export function TeacherView() {
 
     setLoading(true);
     try {
-      const [allSubjects, allStudents, allGroups, allTimetables, todayAttendance] =
-        await Promise.all([
-          fetchSubjects(),
-          fetchStudents(),
-          fetchGroups(),
-          fetchAllTimetables(),
-          fetchAttendanceForDate(today),
-        ]);
+      const [teacherSubjects, todayAttendance] = await Promise.all([
+        fetchSubjectsByTeacher(profile.id),
+        fetchAttendanceForDate(today),
+      ]);
 
-      const teacherSubjects = allSubjects.filter(
-        (subject) => subject.teacherId === profile.id
+      const timetableResults = await Promise.all(
+        teacherSubjects.map((subject) => fetchTimetableBySubject(subject.id))
       );
-      const teacherSubjectIds = new Set(teacherSubjects.map((subject) => subject.id));
-      const teacherTimetables = allTimetables.filter((entry) =>
-        teacherSubjectIds.has(entry.subjectId)
-      );
+      const teacherTimetables = timetableResults.flat();
+      const groupIds = [...new Set(teacherTimetables.map((entry) => entry.groupId))];
+
+      const [groupResults, studentResults] = await Promise.all([
+        Promise.all(groupIds.map((groupId) => fetchGroupById(groupId))),
+        Promise.all(groupIds.map((groupId) => fetchStudentsByGroup(groupId))),
+      ]);
 
       setSubjects(teacherSubjects);
-      setStudents(allStudents);
-      setGroups(allGroups);
+      setStudents(studentResults.flat());
+      setGroups(groupResults.filter((group): group is Group => group !== null));
       setTimetables(teacherTimetables);
       setAttendance(todayAttendance);
     } catch (error) {
