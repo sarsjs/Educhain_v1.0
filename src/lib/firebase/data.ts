@@ -405,6 +405,11 @@ export const fetchTimetableByTeacher = async (teacherId: string): Promise<Timeta
     return [...direct, ...legacy.filter((entry) => !seen.has(entry.id))];
 }, 'timetable by teacher');
 
+export const fetchSubjectById = async (subjectId: string): Promise<Subject | null> => fetchData(async () => {
+    const snapshot = await getDoc(doc(db, "subjects", subjectId));
+    return snapshot.exists() ? ({ id: snapshot.id, ...snapshot.data() } as unknown as Subject) : null;
+}, 'subject by id');
+
 export const fetchSubjectsByIds = async (subjectIds: string[]): Promise<Subject[]> => {
     if (subjectIds.length === 0) return [];
     const results = await Promise.all(subjectIds.map(fetchSubjectById));
