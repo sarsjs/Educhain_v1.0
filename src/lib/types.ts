@@ -55,6 +55,8 @@ export interface TimetableEntry {
     id: string;
     groupId: string;
     subjectId: string;
+    // Profesor que imparte esta clase concreta. Opcional para conservar horarios antiguos.
+    teacherId?: string;
     day: 'Lunes' | 'Martes' | 'Miércoles' | 'Jueves' | 'Viernes';
     time: string; // e.g., "09:00 - 10:00"
 }
