@@ -390,23 +390,16 @@ export const fetchStudentTeachers = async (student: User): Promise<User[]> => {
     return await fetchStudentTeachersByGroupId(student.groupId);
 };
 
-export const fetchTimetableByTeacher = async (teacherId: string): Promise<TimetableEntry[]> => {
-    try {
-        // Primero obtener las materias del profesor
-        const subjects = await fetchSubjectsByTeacher(teacherId);
-        const subjectIds = subjects.map(subject => subject.id);
+export const fetchTimetableByTeacher = async (teacherId: string): Promise<TimetableEntry[]> => fetchData(async () => {
+    const q = query(collection(db, "timetables"), where("teacherId", "==", teacherId));
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as TimetableEntry));
+}, 'timetable by teacher');
 
-        if (subjectIds.length === 0) {
-            return [];
-        }
-
-        // Obtener todos los horarios y filtrar por las materias del profesor
-        const allTimetables = await fetchAllTimetables();
-        return allTimetables.filter(entry => subjectIds.includes(entry.subjectId));
-    } catch (error) {
-        console.error("Error fetching timetable by teacher:", error);
-        return [];
-    }
+export const fetchSubjectsByIds = async (subjectIds: string[]): Promise<Subject[]> => {
+    if (subjectIds.length === 0) return [];
+    const results = await Promise.all(subjectIds.map(fetchSubjectById));
+    return results.filter((subject): subject is Subject => subject !== null);
 };
 
 // Functions for the unified user model
