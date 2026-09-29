@@ -640,10 +640,12 @@ export const fetchWorkLogs = async (date?: string, userId?: string): Promise<Wor
  */
 export const generateAttendanceToken = async (subjectId: string, groupId: string) => {
     const code = Math.floor(1000 + Math.random() * 9000).toString();
+    const date = getTodayDateKey();
     const tokenData = {
         subjectId,
         groupId,
         code,
+        date,
         expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes validity
         createdAt: serverTimestamp()
     };
@@ -675,6 +677,7 @@ export const verifyAttendanceToken = async (groupId: string, code: string) => {
         tokenId: tokenSnapshot.id,
         subjectId: tokenDoc.subjectId as string,
         groupId: tokenDoc.groupId as string,
+        date: tokenDoc.date as string,
         expiresAt: tokenDoc.expiresAt,
     };
 };
