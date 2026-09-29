@@ -227,9 +227,11 @@ export const fetchAttendanceForDate = async (date: string): Promise<Attendance[]
 }, 'attendance for date');
 
 export const fetchAttendanceByStudent = async (studentId: string): Promise<Attendance[]> => fetchData(async () => {
-    const q = query(collection(db, "attendance"), where("studentId", "==", studentId), orderBy("date", "desc"));
+    const q = query(collection(db, "attendance"), where("studentId", "==", studentId));
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as Attendance));
+    return querySnapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as unknown as Attendance))
+        .sort((a, b) => b.date.localeCompare(a.date));
 }, 'attendance by student');
 
 export const fetchGradesBySubjectAndGroup = async (subjectId: string, groupId: string): Promise<Grade[]> => fetchData(async () => {
