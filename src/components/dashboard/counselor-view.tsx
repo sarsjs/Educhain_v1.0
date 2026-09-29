@@ -26,11 +26,11 @@ import {
 } from '@/components/ui/table';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
-  fetchStudents,
   fetchGroupsByCounselor,
   fetchSubjects,
   fetchUsersByRole,
   fetchTimetableByGroups,
+  fetchStudentsByGroup,
   fetchSecurityAlerts,
   fetchAttendanceForDate,
   addStudent,
@@ -116,7 +116,7 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
       ]);
       const assignedGroupIds = groupsData.map((group) => group.id);
       const [studentResults, timetableData] = await Promise.all([
-        Promise.all(assignedGroupIds.map(async (groupId) => fetchStudents().then((students) => students.filter((student) => student.groupId === groupId)))),
+        Promise.all(assignedGroupIds.map((groupId) => fetchStudentsByGroup(groupId))),
         fetchTimetableByGroups(assignedGroupIds),
       ]);
       setStudents(studentResults.flat());
