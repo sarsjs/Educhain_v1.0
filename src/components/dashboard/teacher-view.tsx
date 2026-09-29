@@ -69,6 +69,7 @@ export function TeacherView() {
     expiresAt: number;
     subjectId: string;
     groupId: string;
+    timetableId: string;
   } | null>(null);
   const [countdown, setCountdown] = React.useState(0);
 
