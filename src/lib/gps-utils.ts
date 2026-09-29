@@ -18,11 +18,11 @@ export function calculateDistance(lat1: number, lon1: number, lat2: number, lon2
 }
 
 export const SCHOOL_LOCATION = {
-    // TODO(V1): replace with the real EPO 264 coordinates before enabling attendance GPS.
-    latitude: 19.4326,
-    longitude: -99.1332,
+    // EPO 264: coordenadas proporcionadas para el plantel.
+    latitude: 19.0801094,
+    longitude: -98.8468597,
     radius: 150,
-    name: "CONFIGURAR UBICACIÓN DEL PLANTEL"
+    name: "EPO 264"
 };
 
 export interface LocationScanResult {
