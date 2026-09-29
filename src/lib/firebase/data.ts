@@ -393,7 +393,16 @@ export const fetchStudentTeachers = async (student: User): Promise<User[]> => {
 export const fetchTimetableByTeacher = async (teacherId: string): Promise<TimetableEntry[]> => fetchData(async () => {
     const q = query(collection(db, "timetables"), where("teacherId", "==", teacherId));
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as TimetableEntry));
+    const direct = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as TimetableEntry));
+
+    // Compatibilidad: horarios antiguos todavía pueden no tener teacherId.
+    const legacySubjects = await fetchSubjectsByTeacher(teacherId);
+    const legacyResults = await Promise.all(
+        legacySubjects.map((subject) => fetchTimetableBySubject(subject.id))
+    );
+    const legacy = legacyResults.flat().filter((entry) => !entry.teacherId);
+    const seen = new Set(direct.map((entry) => entry.id));
+    return [...direct, ...legacy.filter((entry) => !seen.has(entry.id))];
 }, 'timetable by teacher');
 
 export const fetchSubjectsByIds = async (subjectIds: string[]): Promise<Subject[]> => {
