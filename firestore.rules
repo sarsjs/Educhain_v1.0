@@ -103,6 +103,8 @@ service cloud.firestore {
         (
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'profesor' &&
           request.resource.data.keys().hasAll(['subjectId', 'groupId', 'code', 'expiresAt']) &&
+          request.resource.data.code is string &&
+          request.resource.data.code.size() == 4 &&
           get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data.teacherId == request.auth.uid &&
           request.resource.data.expiresAt > request.time
         )
