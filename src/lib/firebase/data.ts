@@ -1,4 +1,4 @@
-import { collection, getDocs, addDoc, doc, deleteDoc, query, where, updateDoc, writeBatch, orderBy, serverTimestamp, getDoc, deleteField, limit, onSnapshot, arrayUnion } from "firebase/firestore";
+import { collection, getDocs, addDoc, doc, deleteDoc, query, where, updateDoc, writeBatch, orderBy, serverTimestamp, getDoc, deleteField, limit, onSnapshot, arrayUnion, setDoc } from "firebase/firestore";
 import { db, storage } from "./client";
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
@@ -659,12 +659,47 @@ export const verifyAttendanceToken = async (groupId: string, code: string) => {
     const querySnapshot = await getDocs(q);
     if (querySnapshot.empty) return null;
 
-    const tokenDoc = querySnapshot.docs[0].data();
-    const expiresAt = tokenDoc.expiresAt.toDate();
+    const tokenSnapshot = querySnapshot.docs[0];
+    const tokenDoc = tokenSnapshot.data();
+    const expiresAt = tokenDoc.expiresAt?.toDate?.() ?? new Date(tokenDoc.expiresAt);
 
-    if (now > expiresAt) return null; // Token expired
+    if (now > expiresAt) return null;
 
-    return tokenDoc;
+    return {
+        tokenId: tokenSnapshot.id,
+        subjectId: tokenDoc.subjectId as string,
+        groupId: tokenDoc.groupId as string,
+        expiresAt: tokenDoc.expiresAt,
+    };
+};
+
+export const registerAttendanceFromToken = async ({
+    studentId,
+    groupId,
+    tokenId,
+    subjectId,
+    date,
+}: {
+    studentId: string;
+    groupId: string;
+    tokenId: string;
+    subjectId: string;
+    date: string;
+}) => {
+    const attendanceId = studentId + "_" + date + "_" + subjectId;
+    const attendanceRef = doc(db, "attendance", attendanceId);
+
+    await setDoc(attendanceRef, {
+        studentId,
+        groupId,
+        subjectId,
+        date,
+        present: true,
+        tokenId,
+        createdAt: serverTimestamp(),
+    }, { merge: true });
+
+    return attendanceId;
 };
 
 /**
