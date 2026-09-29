@@ -27,9 +27,10 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   fetchStudents,
-  fetchGroups,
+  fetchGroupsByCounselor,
   fetchSubjects,
-  fetchAllTimetables,
+  fetchUsersByRole,
+  fetchTimetableByGroups,
   fetchSecurityAlerts,
   fetchAttendanceForDate,
   addStudent,
@@ -59,6 +60,7 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
   const [students, setStudents] = React.useState<Student[]>([]);
   const [groups, setGroups] = React.useState<Group[]>([]);
   const [subjects, setSubjects] = React.useState<Subject[]>([]);
+  const [teachers, setTeachers] = React.useState<User[]>([]);
   const [timetable, setTimetable] = React.useState<TimetableEntry[]>([]);
   const [securityAlerts, setSecurityAlerts] = React.useState<SecurityAlert[]>([]);
   const [attendance, setAttendance] = React.useState<import('@/lib/types').Attendance[]>([]);
@@ -87,9 +89,8 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
   const [addScheduleOpen, setAddScheduleOpen] = React.useState(false);
   const [newScheduleDay, setNewScheduleDay] = React.useState<TimetableEntry['day']>('Lunes');
   const [newScheduleTime, setNewScheduleTime] = React.useState('');
-  const [newScheduleSubjectId, setNewScheduleSubjectId] = React.useState(
-    subjects[0]?.id ?? ''
-  );
+  const [newScheduleSubjectId, setNewScheduleSubjectId] = React.useState('');
+  const [newScheduleTeacherId, setNewScheduleTeacherId] = React.useState('');
   const [newScheduleGroupId, setNewScheduleGroupId] = React.useState(
     assignedGroupIds[0] ?? ''
   );
@@ -106,18 +107,23 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
     try {
       const today = new Date();
       const todayKey = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
-      const [studentsData, groupsData, subjectsData, timetablesData, alertsData, attendanceData] = await Promise.all([
-        fetchStudents(),
-        fetchGroups(),
+      const [groupsData, subjectsData, teachersData, alertsData, attendanceData] = await Promise.all([
+        fetchGroupsByCounselor(currentUser.id),
         fetchSubjects(),
-        fetchAllTimetables(),
+        fetchUsersByRole('profesor'),
         fetchSecurityAlerts(),
         fetchAttendanceForDate(todayKey),
       ]);
-      setStudents(studentsData);
+      const assignedGroupIds = groupsData.map((group) => group.id);
+      const [studentResults, timetableData] = await Promise.all([
+        Promise.all(assignedGroupIds.map(async (groupId) => fetchStudents().then((students) => students.filter((student) => student.groupId === groupId)))),
+        fetchTimetableByGroups(assignedGroupIds),
+      ]);
+      setStudents(studentResults.flat());
       setGroups(groupsData);
       setSubjects(subjectsData);
-      setTimetable(timetablesData);
+      setTeachers(teachersData);
+      setTimetable(timetableData);
       setSecurityAlerts(alertsData);
       setAttendance(attendanceData);
     } catch (error) {
@@ -169,7 +175,7 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
   };
 
   const handleAddSchedule = async () => {
-    if (!newScheduleTime || !newScheduleSubjectId || !newScheduleGroupId) {
+    if (!newScheduleTime || !newScheduleSubjectId || !newScheduleTeacherId || !newScheduleGroupId) {
       toast({
         title: 'Datos incompletos',
         description: 'Completa todos los campos del horario.',
@@ -181,6 +187,7 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
       await addTimetableEntry({
         groupId: newScheduleGroupId,
         subjectId: newScheduleSubjectId,
+        teacherId: newScheduleTeacherId,
         day: newScheduleDay,
         time: newScheduleTime,
       });
@@ -188,6 +195,7 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
       setNewScheduleDay('Lunes');
       setNewScheduleTime('');
       setNewScheduleSubjectId(subjects[0]?.id ?? '');
+      setNewScheduleTeacherId('');
       setNewScheduleGroupId(assignedGroupIds[0] ?? '');
       setAddScheduleOpen(false);
       toast({
@@ -316,6 +324,19 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
                         placeholder='Email del estudiante'
                         type='email'
                       />
+                    </div>
+                    <div className='space-y-2'>
+                      <label className='block text-sm font-medium'>Profesor</label>
+                      <Select value={newScheduleTeacherId} onValueChange={setNewScheduleTeacherId}>
+                        <SelectTrigger className='w-full'>
+                          <SelectValue placeholder='Seleccionar profesor' />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {teachers.map((teacher) => (
+                            <SelectItem key={teacher.id} value={teacher.id}>{teacher.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className='space-y-2'>
                       <label className='block text-sm font-medium'>Grupo</label>
