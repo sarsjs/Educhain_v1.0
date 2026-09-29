@@ -31,6 +31,7 @@ import {
   fetchSubjects,
   fetchAllTimetables,
   fetchSecurityAlerts,
+  fetchAttendanceForDate,
   addStudent,
   addTimetableEntry,
 } from '@/lib/firebase/data';
@@ -60,12 +61,13 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
   const [subjects, setSubjects] = React.useState<Subject[]>([]);
   const [timetable, setTimetable] = React.useState<TimetableEntry[]>([]);
   const [securityAlerts, setSecurityAlerts] = React.useState<SecurityAlert[]>([]);
+  const [attendance, setAttendance] = React.useState<import('@/lib/types').Attendance[]>([]);
   const [loading, setLoading] = React.useState(true);
 
   const { toast } = useToast();
   const { profile } = useAuth();
 
-  const assignedGroups = groups.filter((g) => g.counselorId === currentUser.id);
+  const assignedGroups = groups.filter((g) => g.counselorId === currentUser.id || g.tempCounselorId === currentUser.id);
   const assignedGroupIds = assignedGroups.map((g) => g.id);
 
   const assignedStudents = students.filter((s) => assignedGroupIds.includes(s.groupId));
@@ -102,18 +104,22 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
 
   const loadData = React.useCallback(async () => {
     try {
-      const [studentsData, groupsData, subjectsData, timetablesData, alertsData] = await Promise.all([
+      const today = new Date();
+      const todayKey = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+      const [studentsData, groupsData, subjectsData, timetablesData, alertsData, attendanceData] = await Promise.all([
         fetchStudents(),
         fetchGroups(),
         fetchSubjects(),
         fetchAllTimetables(),
         fetchSecurityAlerts(),
+        fetchAttendanceForDate(todayKey),
       ]);
       setStudents(studentsData);
       setGroups(groupsData);
       setSubjects(subjectsData);
       setTimetable(timetablesData);
       setSecurityAlerts(alertsData);
+      setAttendance(attendanceData);
     } catch (error) {
       console.error('Failed to load data', error);
       toast({ title: 'Error', description: 'Failed to load data from the server.' });
@@ -250,7 +256,7 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
         </div>
       )}
 
-      <RealTimeAttendance students={assignedStudents} />
+      <RealTimeAttendance students={assignedStudents} attendance={attendance} />
 
 
       {profile?.role === 'orientador' && (
