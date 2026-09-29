@@ -68,6 +68,7 @@ export interface Attendance {
     present: boolean;
     subjectId: string;
     groupId: string;
+    timetableId?: string;
 }
 
 export type RecipientFilter =
