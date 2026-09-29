@@ -172,6 +172,22 @@ export const fetchTimetableByGroup = async (groupId: string): Promise<TimetableE
     return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as TimetableEntry));
 }, 'timetable by group');
 
+export const fetchTimetableBySubject = async (subjectId: string): Promise<TimetableEntry[]> => fetchData(async () => {
+    const q = query(collection(db, "timetables"), where("subjectId", "==", subjectId));
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as TimetableEntry));
+}, 'timetable by subject');
+
+export const fetchGroupById = async (groupId: string): Promise<Group | null> => {
+    try {
+        const snapshot = await getDoc(doc(db, "groups", groupId));
+        return snapshot.exists() ? ({ id: snapshot.id, ...snapshot.data() } as unknown as Group) : null;
+    } catch (error) {
+        console.error("Error fetching group by id:", error);
+        return null;
+    }
+};
+
 export const fetchAllTimetables = async (): Promise<TimetableEntry[]> => fetchData(async () => {
     const querySnapshot = await getDocs(collection(db, "timetables"));
     return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as TimetableEntry));
@@ -260,20 +276,21 @@ export const fetchTeacherStudents = async (teacherId: string): Promise<User[]> =
         }
 
         // Obtener horarios basados en esas materias
-        const allTimetables = await fetchAllTimetables();
-        const groupIds = [...new Set(allTimetables
-            .filter(entry => subjectIds.includes(entry.subjectId))
-            .map(entry => entry.groupId))];
+        const timetableResults = await Promise.all(
+            subjectIds.map(subjectId => fetchTimetableBySubject(subjectId))
+        );
+        const groupIds = [...new Set(
+            timetableResults.flat().map(entry => entry.groupId)
+        )];
 
         if (groupIds.length === 0) {
             return [];
         }
 
-        // Obtener todos los usuarios y filtrar estudiantes de esos grupos
-        const allUsers = await fetchUsers();
-        return allUsers.filter(user =>
-            (user.role === 'estudiante' || user.role === 'alumno') && groupIds.includes(user.groupId)
+        const studentsByGroup = await Promise.all(
+            groupIds.map(groupId => fetchStudentsByGroup(groupId))
         );
+        return studentsByGroup.flat();
     } catch (error) {
         console.error("Error fetching teacher students:", error);
         return [];
@@ -390,10 +407,15 @@ export const fetchStudents = async (): Promise<User[]> => fetchData(async () => 
     return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as User));
 }, 'students');
 
-export const fetchStudentsByGroup = async (groupId: string): Promise<User[]> => {
-    const allStudents = await fetchStudents();
-    return allStudents.filter(student => student.groupId === groupId);
-};
+export const fetchStudentsByGroup = async (groupId: string): Promise<User[]> => fetchData(async () => {
+    const q = query(
+        collection(db, "users"),
+        where("role", "in", ["estudiante", "alumno"]),
+        where("groupId", "==", groupId)
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as User));
+}, 'students by group');
 
 // Función para obtener un usuario por ID
 
