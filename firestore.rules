@@ -9,7 +9,7 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'director' ||
         (
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'orientador' &&
-          (resource.data.role == 'estudiante' || resource.data.role == 'alumno')
+          (resource.data.role == 'estudiante' || resource.data.role == 'alumno' || resource.data.role == 'profesor')
         ) ||
         (
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'profesor' &&
@@ -50,11 +50,36 @@ service cloud.firestore {
                    get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'director';
     }
 
-    // Timetables collection - read allowed for all, write only for directors
+    // Timetables: director has full control; orientador may manage schedules
+    // only for groups assigned to them (titular or temporary coverage).
     match /timetables/{timetableId} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null &&
-                   get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'director';
+      allow create: if request.auth != null && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'director' ||
+        (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'orientador' &&
+          exists(/databases/$(database)/documents/groups/$(request.resource.data.groupId)) &&
+          (
+            get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.counselorId == request.auth.uid ||
+            get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.tempCounselorId == request.auth.uid
+          )
+        )
+      );
+      allow update, delete: if request.auth != null && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'director' ||
+        (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'orientador' &&
+          (
+            get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.counselorId == request.auth.uid ||
+            get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.tempCounselorId == request.auth.uid
+          ) &&
+          (
+            request.resource.data.groupId == resource.data.groupId ||
+            get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.counselorId == request.auth.uid ||
+            get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.tempCounselorId == request.auth.uid
+          )
+        )
+      );
     }
 
     // Messages collection - read allowed for authenticated users, write restricted
