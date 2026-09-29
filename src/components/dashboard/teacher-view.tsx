@@ -154,7 +154,7 @@ export function TeacherView() {
   const getGroupIdsForSubject = (subjectId: string) =>
     [...new Set(
       timetables
-        .filter((entry) => entry.subjectId === subjectId)
+        .filter((entry) => entry.subjectId === subjectId && (!entry.teacherId || entry.teacherId === profile?.id))
         .map((entry) => entry.groupId)
     )];
 
