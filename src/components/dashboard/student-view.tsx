@@ -61,6 +61,8 @@ export function StudentView() {
   );
 
   const today = getLocalDate();
+  const currentDayIndex = new Date().getDay();
+  const currentDay: TimetableEntry["day"] | null = currentDayIndex >= 1 && currentDayIndex <= 5 ? daysOfWeek[currentDayIndex - 1] : null;
 
   const loadData = React.useCallback(async () => {
     if (!profile?.email) return;
@@ -353,15 +355,13 @@ export function StudentView() {
                               <p className="text-xs text-muted-foreground">{entry.time}</p>
                             </div>
                           </div>
-                          {entry.day === daysOfWeek[new Date().getDay() - 1] && present ? (
-                            <Badge className="shrink-0">
+                          {present ? (
+                            <Badge variant={entry.day === currentDay ? "default" : "outline"} className="shrink-0">
                               <CheckCircle className="h-3 w-3 mr-1" />
-                              Presente
+                              {entry.day === currentDay ? "Presente hoy" : "Presente"}
                             </Badge>
                           ) : (
-                            <Badge variant="outline" className="shrink-0">
-                              {present ? "Presente hoy" : "Pendiente"}
-                            </Badge>
+                            <Badge variant="outline" className="shrink-0">Pendiente</Badge>
                           )}
                         </div>
                       );
