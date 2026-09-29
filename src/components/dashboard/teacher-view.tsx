@@ -15,10 +15,11 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/context/auth-context";
 import { IdCard } from "@/components/dashboard/id-card";
 import {
-  fetchSubjectsByTeacher,
   fetchStudentsByGroup,
   fetchGroupById,
   fetchTimetableBySubject,
+  fetchTimetableByTeacher,
+  fetchSubjectsByIds,
   fetchAttendanceForDate,
   generateAttendanceToken,
 } from "@/lib/firebase/data";
@@ -80,15 +81,13 @@ export function TeacherView() {
 
     setLoading(true);
     try {
-      const [teacherSubjects, todayAttendance] = await Promise.all([
-        fetchSubjectsByTeacher(profile.id),
+      const [teacherTimetables, todayAttendance] = await Promise.all([
+        fetchTimetableByTeacher(profile.id),
         fetchAttendanceForDate(today),
       ]);
-
-      const timetableResults = await Promise.all(
-        teacherSubjects.map((subject) => fetchTimetableBySubject(subject.id))
+      const teacherSubjects = await fetchSubjectsByIds(
+        [...new Set(teacherTimetables.map((entry) => entry.subjectId))]
       );
-      const teacherTimetables = timetableResults.flat();
       const groupIds = [...new Set(teacherTimetables.map((entry) => entry.groupId))];
 
       const [groupResults, studentResults] = await Promise.all([
