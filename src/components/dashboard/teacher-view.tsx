@@ -36,6 +36,23 @@ const getLocalDate = () => {
   );
 };
 
+const getCurrentDay = (): TimetableEntry["day"] | null => {
+  const day = new Date().getDay();
+  return day >= 1 && day <= 5 ? (["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"] as const)[day - 1] : null;
+};
+
+const isCurrentTimetableEntry = (entry: TimetableEntry) => {
+  const day = getCurrentDay();
+  if (entry.day !== day) return false;
+  const match = entry.time.match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
+  if (!match) return false;
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const start = Number(match[1]) * 60 + Number(match[2]);
+  const end = Number(match[3]) * 60 + Number(match[4]);
+  return currentMinutes >= start && currentMinutes < end;
+};
+
 export function TeacherView() {
   const { toast } = useToast();
   const { profile } = useAuth();
@@ -115,9 +132,9 @@ export function TeacherView() {
     return () => window.clearInterval(timer);
   }, [activeToken]);
 
-  const handleStartAttendance = async (subjectId: string, groupId: string) => {
+  const handleStartAttendance = async (subjectId: string, groupId: string, timetableId: string) => {
     try {
-      const token = await generateAttendanceToken(subjectId, groupId);
+      const token = await generateAttendanceToken(subjectId, groupId, timetableId);
       const expiresAt = Date.now() + 5 * 60 * 1000;
 
       setActiveToken({
@@ -125,6 +142,7 @@ export function TeacherView() {
         expiresAt,
         subjectId,
         groupId,
+        timetableId,
       });
       setCountdown(300);
 
@@ -252,6 +270,12 @@ export function TeacherView() {
                       const groupStudents = students.filter(
                         (student) => student.groupId === groupId
                       );
+                      const currentEntry = timetables.find(
+                        (entry) => entry.subjectId === subject.id &&
+                          entry.groupId === groupId &&
+                          (!entry.teacherId || entry.teacherId === profile?.id) &&
+                          isCurrentTimetableEntry(entry)
+                      );
                       const isTokenActive =
                         activeToken?.subjectId === subject.id &&
                         activeToken.groupId === groupId;
@@ -291,10 +315,11 @@ export function TeacherView() {
                               </div>
                             ) : (
                               <Button
-                                onClick={() => handleStartAttendance(subject.id, groupId)}
+                                onClick={() => currentEntry && handleStartAttendance(subject.id, groupId, currentEntry.id)}
+                                disabled={!currentEntry}
                               >
                                 <KeyRound className="h-4 w-4 mr-2" />
-                                Iniciar pase de lista
+                                {currentEntry ? "Iniciar pase de lista" : "Fuera de horario"}
                               </Button>
                             )}
                           </div>
