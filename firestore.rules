@@ -134,7 +134,8 @@ service cloud.firestore {
           request.resource.data.groupId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.groupId &&
           get(/databases/$(database)/documents/attendance_tokens/$(request.resource.data.tokenId)).data.groupId == request.resource.data.groupId &&
           get(/databases/$(database)/documents/attendance_tokens/$(request.resource.data.tokenId)).data.subjectId == request.resource.data.subjectId &&
-          get(/databases/$(database)/documents/attendance_tokens/$(request.resource.data.tokenId)).data.expiresAt > request.time
+          get(/databases/$(database)/documents/attendance_tokens/$(request.resource.data.tokenId)).data.expiresAt > request.time &&
+          request.resource.data.date == request.time.date()
         )
       );
 
