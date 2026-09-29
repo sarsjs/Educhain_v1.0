@@ -59,10 +59,12 @@ export async function verifyUserLocation(
     let isMocked = false;
     let confidence: 'high' | 'medium' | 'low' = 'high';
 
-    // 1. Suspicious precision (accuracy <= 1 is unrealistic on real devices)
-    if (accuracy <= 1) {
-        isMocked = true;
+    // 1. Accuracy is used only as a confidence signal. Very precise GPS is
+    //    possible on real devices and must not be rejected as simulated by itself.
+    if (accuracy > 100) {
         confidence = 'low';
+    } else if (accuracy > 30) {
+        confidence = 'medium';
     }
 
     // 2. Impossible speed (over ~120 km/h near the school)
