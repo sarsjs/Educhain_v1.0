@@ -177,6 +177,7 @@ export function StudentView() {
         tokenId: token.tokenId,
         subjectId: token.subjectId,
         date: today,
+        timetableId: token.timetableId,
       });
 
       if (result.alreadyRegistered) {
