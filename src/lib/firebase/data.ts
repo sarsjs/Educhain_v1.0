@@ -672,12 +672,13 @@ export const fetchWorkLogs = async (date?: string, userId?: string): Promise<Wor
 /**
  * Generates a temporary 4-digit code for a class session.
  */
-export const generateAttendanceToken = async (subjectId: string, groupId: string) => {
+export const generateAttendanceToken = async (subjectId: string, groupId: string, timetableId: string) => {
     const code = Math.floor(1000 + Math.random() * 9000).toString();
     const date = getTodayDateKey();
     const tokenData = {
         subjectId,
         groupId,
+        timetableId,
         code,
         date,
         expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes validity
@@ -712,6 +713,7 @@ export const verifyAttendanceToken = async (groupId: string, code: string) => {
         subjectId: tokenDoc.subjectId as string,
         groupId: tokenDoc.groupId as string,
         date: tokenDoc.date as string,
+        timetableId: tokenDoc.timetableId as string,
         expiresAt: tokenDoc.expiresAt,
     };
 };
@@ -728,8 +730,9 @@ export const registerAttendanceFromToken = async ({
     tokenId: string;
     subjectId: string;
     date: string;
+    timetableId: string;
 }) => {
-    const attendanceId = studentId + "_" + date + "_" + subjectId;
+    const attendanceId = studentId + "_" + date + "_" + timetableId;
     const attendanceRef = doc(db, "attendance", attendanceId);
     const existing = await getDoc(attendanceRef);
 
@@ -741,6 +744,7 @@ export const registerAttendanceFromToken = async ({
         studentId,
         groupId,
         subjectId,
+        timetableId,
         date,
         present: true,
         tokenId,
