@@ -89,6 +89,12 @@ export const fetchUserByEmail = async (email: string): Promise<User | null> => {
     }
 };
 
+export const fetchUsersByRole = async (role: User['role']): Promise<User[]> => fetchData(async () => {
+    const q = query(collection(db, "users"), where("role", "==", role));
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as User));
+}, 'users by role');
+
 export const fetchUserById = async (id: string): Promise<User | null> => {
     try {
         const docRef = doc(db, "users", id);
@@ -171,6 +177,12 @@ export const fetchTimetableByGroup = async (groupId: string): Promise<TimetableE
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as TimetableEntry));
 }, 'timetable by group');
+
+export const fetchTimetableByGroups = async (groupIds: string[]): Promise<TimetableEntry[]> => {
+    if (groupIds.length === 0) return [];
+    const results = await Promise.all(groupIds.map(fetchTimetableByGroup));
+    return results.flat();
+};
 
 export const fetchTimetableBySubject = async (subjectId: string): Promise<TimetableEntry[]> => fetchData(async () => {
     const q = query(collection(db, "timetables"), where("subjectId", "==", subjectId));
