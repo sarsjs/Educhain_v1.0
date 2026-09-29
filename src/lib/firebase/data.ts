@@ -688,6 +688,11 @@ export const registerAttendanceFromToken = async ({
 }) => {
     const attendanceId = studentId + "_" + date + "_" + subjectId;
     const attendanceRef = doc(db, "attendance", attendanceId);
+    const existing = await getDoc(attendanceRef);
+
+    if (existing.exists()) {
+        return { id: attendanceId, alreadyRegistered: true };
+    }
 
     await setDoc(attendanceRef, {
         studentId,
@@ -697,9 +702,9 @@ export const registerAttendanceFromToken = async ({
         present: true,
         tokenId,
         createdAt: serverTimestamp(),
-    }, { merge: true });
+    });
 
-    return attendanceId;
+    return { id: attendanceId, alreadyRegistered: false };
 };
 
 /**
