@@ -270,6 +270,40 @@ service cloud.firestore {
       );
     }
 
+    // Novedades registradas durante una cobertura temporal.
+    // No modifican automáticamente asistencia; dejan constancia de lo ocurrido.
+    match /counselor_incident_reports/{reportId} {
+      allow read: if request.auth != null && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['director', 'admin'] ||
+        get(/databases/$(database)/documents/counselor_coverages/$(resource.data.coverageId)).data.primaryCounselorId == request.auth.uid ||
+        get(/databases/$(database)/documents/counselor_coverages/$(resource.data.coverageId)).data.substituteCounselorId == request.auth.uid
+      );
+
+      allow create: if request.auth != null &&
+        request.resource.data.keys().hasAll([
+          'coverageId', 'groupId', 'date', 'time', 'type', 'summary',
+          'createdBy', 'createdByName', 'createdByRole'
+        ]) &&
+        (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'director' ||
+          (
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'orientador' &&
+            request.resource.data.createdBy == request.auth.uid &&
+            (
+              get(/databases/$(database)/documents/counselor_coverages/$(request.resource.data.coverageId)).data.primaryCounselorId == request.auth.uid ||
+              get(/databases/$(database)/documents/counselor_coverages/$(request.resource.data.coverageId)).data.substituteCounselorId == request.auth.uid
+            ) &&
+            get(/databases/$(database)/documents/counselor_coverages/$(request.resource.data.coverageId)).data.groupId == request.resource.data.groupId &&
+            get(/databases/$(database)/documents/counselor_coverages/$(request.resource.data.coverageId)).data.status == 'active' &&
+            request.time >= get(/databases/$(database)/documents/counselor_coverages/$(request.resource.data.coverageId)).data.startsAt &&
+            request.time <= get(/databases/$(database)/documents/counselor_coverages/$(request.resource.data.coverageId)).data.endsAt
+          )
+        );
+
+      allow update, delete: if request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['director', 'admin'];
+    }
+
     // Substitution requests remain separate from the actual temporary coverage.
     match /substitution_requests/{requestId} {
       allow read: if request.auth != null && (
