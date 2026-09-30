@@ -731,8 +731,7 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
                       <p className="text-3xl font-black tracking-[0.25em] text-primary">{activeCoverageToken.code}</p>
                       <p className="text-xs text-muted-foreground">Expira en {Math.floor(coverageTokenCountdown / 60)}:{String(coverageTokenCountdown % 60).padStart(2, '0')}</p>
                     </div>
-                  ) : (
-                    takeover ? (
+                  ) : takeover ? (
                     <Button disabled={!currentEntry || !subject} onClick={async () => {
                       if (!currentEntry) return;
                       try {
@@ -744,6 +743,78 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
                         toast({ title: 'No se pudo iniciar el pase', description: 'La cobertura puede haber terminado o el horario no corresponde.', variant: 'destructive' });
                       }
                     }}>Generar código</Button>
+                  ) : (
+                    <Dialog open={takeoverDialogCoverageId === coverage.id} onOpenChange={(open) => {
+                      if (!open) setTakeoverDialogCoverageId('');
+                    }}>
+                      <Button
+                        disabled={!currentEntry || !subject || !scheduledTeacherId}
+                        onClick={() => {
+                          setTakeoverDialogCoverageId(coverage.id);
+                          setTakeoverReason('teacher_absent');
+                          setTakeoverNote('');
+                        }}
+                      >
+                        Tomar grupo por ausencia
+                      </Button>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Tomar grupo temporalmente</DialogTitle>
+                          <DialogDescription>
+                            Esta acción quedará registrada y habilitará el pase de lista únicamente para esta clase.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4">
+                          <div className="rounded-lg border p-3 text-sm">
+                            <p><span className="font-medium">Grupo:</span> {group?.name || coverage.groupId}</p>
+                            <p><span className="font-medium">Materia:</span> {subject?.name || 'Sin materia'}</p>
+                            <p><span className="font-medium">Profesor programado:</span> {scheduledTeacher?.name || 'No identificado'}</p>
+                            <p><span className="font-medium">Horario:</span> {currentEntry?.time}</p>
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium">Motivo</label>
+                            <Select value={takeoverReason} onValueChange={(value) => setTakeoverReason(value as CounselorTakeoverReason)}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="teacher_absent">Profesor ausente</SelectItem>
+                                <SelectItem value="teacher_unavailable">Profesor no disponible</SelectItem>
+                                <SelectItem value="other">Otra causa</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <Input value={takeoverNote} onChange={(e) => setTakeoverNote(e.target.value)} placeholder="Observación opcional" />
+                        </div>
+                        <DialogFooter>
+                          <Button variant="outline" onClick={() => setTakeoverDialogCoverageId('')}>Cancelar</Button>
+                          <Button onClick={async () => {
+                            if (!currentEntry || !scheduledTeacherId) return;
+                            try {
+                              await createCounselorClassTakeover({
+                                coverageId: coverage.id,
+                                groupId: coverage.groupId,
+                                timetableId: currentEntry.id,
+                                subjectId: currentEntry.subjectId,
+                                teacherId: scheduledTeacherId,
+                                counselorId: currentUser.id,
+                                date: coverage.date,
+                                startTime: currentEntry.time.split('-')[0].trim(),
+                                endTime: currentEntry.time.split('-')[1]?.trim() || currentEntry.time,
+                                reason: takeoverReason,
+                                note: takeoverNote.trim() || undefined,
+                              });
+                              setTakeoverDialogCoverageId('');
+                              setTakeoverNote('');
+                              const refreshed = await fetchCounselorClassTakeovers(coverageRecords.map((item) => item.id));
+                              setClassTakeovers(refreshed);
+                              toast({ title: 'Grupo tomado', description: 'La toma del grupo quedó registrada. Ahora puedes generar el código de asistencia.' });
+                            } catch (error) {
+                              console.error(error);
+                              toast({ title: 'No se pudo tomar el grupo', description: error instanceof Error ? error.message : 'La cobertura o la clase ya no son válidas.', variant: 'destructive' });
+                            }
+                          }}>Confirmar toma del grupo</Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
                   )}
                 </div>
                 {!currentEntry && <p className="text-xs text-muted-foreground">El código solo puede generarse durante una clase programada de este grupo.</p>}
