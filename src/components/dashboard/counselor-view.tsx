@@ -97,7 +97,9 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
   const { profile } = useAuth();
 
   const assignedGroups = groups.filter((g) => g.counselorId === currentUser.id || g.tempCounselorId === currentUser.id);
-  const assignedGroupIds = assignedGroups.map((g) => g.id);
+  const coveredGroups = groups.filter((g) => coverageRecords.some((coverage) => coverage.groupId === g.id && isCounselorCoverageActive(coverage)));
+  const effectiveGroups = [...new Map([...assignedGroups, ...coveredGroups].map((group) => [group.id, group])).values()];
+  const assignedGroupIds = effectiveGroups.map((g) => g.id);
 
   const assignedStudents = students.filter((s) => assignedGroupIds.includes(s.groupId));
   const assignedStudentIds = assignedStudents.map((s) => s.id);
@@ -165,13 +167,16 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
       const assignedGroupIds = groupsData.map((group) => group.id);
       const coverageGroupIds = [...new Set(coveragesData.map((coverage) => coverage.groupId))];
       const relevantGroupIds = [...new Set([...assignedGroupIds, ...coverageGroupIds])];
+      const coverageGroups = (await Promise.all(coverageGroupIds.map((groupId) => fetchGroupById(groupId)))).filter((group): group is Group => group !== null);
+      const effectiveGroups = [...new Map([...groupsData, ...coverageGroups].map((group) => [group.id, group])).values()];
+      const effectiveGroupIds = effectiveGroups.map((group) => group.id);
       const [studentResults, timetableData, reportData] = await Promise.all([
         Promise.all(relevantGroupIds.map((groupId) => fetchStudentsByGroup(groupId))),
-        fetchTimetableByGroups(assignedGroupIds),
+        fetchTimetableByGroups(effectiveGroupIds),
         fetchCounselorIncidentReports(coveragesData.map((coverage) => coverage.id)),
       ]);
       setStudents(studentResults.flat());
-      setGroups(groupsData);
+      setGroups(effectiveGroups);
       setSubjects(subjectsData);
       setTeachers(teachersData);
       setOtherCounselors(counselorsData.filter(counselor => counselor.id !== currentUser.id));
@@ -181,14 +186,14 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
       setTimetable(timetableData);
       setSecurityAlerts(alertsData);
       setAttendance(attendanceData);
-      setPresenceChecks(await fetchSchoolPresenceChecks(todayKey, undefined, assignedGroupIds));
+      setPresenceChecks(await fetchSchoolPresenceChecks(todayKey, undefined, effectiveGroupIds));
     } catch (error) {
       console.error('Failed to load data', error);
       toast({ title: 'Error', description: 'Failed to load data from the server.' });
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, currentUser.id]);
 
   React.useEffect(() => {
     loadData();
