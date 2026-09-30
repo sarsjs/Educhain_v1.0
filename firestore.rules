@@ -296,6 +296,43 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['director', 'admin'];
     }
 
+    // Registro formal de que el orientador sustituto tomó una clase porque el profesor
+    // programado estaba ausente o no disponible. No modifica al profesor del horario.
+    match /counselor_class_takeovers/{takeoverId} {
+      allow read: if request.auth != null && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['director', 'admin'] ||
+        resource.data.counselorId == request.auth.uid ||
+        get(/databases/$(database)/documents/counselor_coverages/$(resource.data.coverageId)).data.primaryCounselorId == request.auth.uid
+      );
+
+      allow create: if request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'orientador' &&
+        request.resource.data.counselorId == request.auth.uid &&
+        request.resource.data.keys().hasAll([
+          'coverageId', 'groupId', 'timetableId', 'subjectId', 'teacherId',
+          'counselorId', 'date', 'startTime', 'endTime', 'reason', 'createdAt'
+        ]) &&
+        request.resource.data.reason in ['teacher_absent', 'teacher_unavailable', 'other'] &&
+        get(/databases/$(database)/documents/counselor_coverages/$(request.resource.data.coverageId)).data.substituteCounselorId == request.auth.uid &&
+        get(/databases/$(database)/documents/counselor_coverages/$(request.resource.data.coverageId)).data.groupId == request.resource.data.groupId &&
+        get(/databases/$(database)/documents/counselor_coverages/$(request.resource.data.coverageId)).data.status == 'active' &&
+        request.time >= get(/databases/$(database)/documents/counselor_coverages/$(request.resource.data.coverageId)).data.startsAt &&
+        request.time <= get(/databases/$(database)/documents/counselor_coverages/$(request.resource.data.coverageId)).data.endsAt &&
+        get(/databases/$(database)/documents/timetables/$(request.resource.data.timetableId)).data.groupId == request.resource.data.groupId &&
+        get(/databases/$(database)/documents/timetables/$(request.resource.data.timetableId)).data.subjectId == request.resource.data.subjectId &&
+        (
+          get(/databases/$(database)/documents/timetables/$(request.resource.data.timetableId)).data.teacherId == request.resource.data.teacherId ||
+          (
+            !get(/databases/$(database)/documents/timetables/$(request.resource.data.timetableId)).data.keys().hasAny(['teacherId']) &&
+            get(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId)).data.teacherId == request.resource.data.teacherId
+          )
+        ) &&
+        request.resource.data.date == get(/databases/$(database)/documents/counselor_coverages/$(request.resource.data.coverageId)).data.date;
+
+      allow update, delete: if request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['director', 'admin'];
+    }
+
     // Novedades registradas durante una cobertura temporal.
     // No modifican automáticamente asistencia; dejan constancia de lo ocurrido.
     match /counselor_incident_reports/{reportId} {
