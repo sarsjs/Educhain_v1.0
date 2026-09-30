@@ -64,21 +64,27 @@ export function SchoolPresenceMonitor() {
                 timetableRef.current = await fetchTimetableByTeacher(profile.id);
             }
             const currentDay = new Intl.DateTimeFormat('es-MX', { weekday: 'long' }).format(now).replace(/^./, c => c.toUpperCase()) as 'Lunes' | 'Martes' | 'Miércoles' | 'Jueves' | 'Viernes';
-            const minutes = now.getHours() * 60 + now.getMinutes();
-            const currentClass = profile.role === 'profesor'
-                ? timetableRef.current.find(entry => {
-                    if (entry.day !== currentDay) return false;
-                    const match = entry.time.match(/(\\d{1,2}):(\\d{2})\\s*-\\s*(\\d{1,2}):(\\d{2})/);
-                    if (!match) return false;
-                    const start = Number(match[1]) * 60 + Number(match[2]);
-                    const end = Number(match[3]) * 60 + Number(match[4]);
-                    return minutes >= start && minutes < end;
-                })
+            // Para profesores, la observación de las 07:00-07:20 se vincula
+            // al primer grupo que atienden durante las dos primeras horas.
+            const morningClass = profile.role === 'profesor'
+                ? timetableRef.current
+                    .filter(entry => entry.day === currentDay)
+                    .map(entry => {
+                        const match = entry.time.match(/(\\d{1,2}):(\\d{2})\\s*-\\s*(\\d{1,2}):(\\d{2})/);
+                        if (!match) return null;
+                        const start = Number(match[1]) * 60 + Number(match[2]);
+                        const end = Number(match[3]) * 60 + Number(match[4]);
+                        return { entry, start, end };
+                    })
+                    .filter((item): item is { entry: typeof timetableRef.current[number]; start: number; end: number } =>
+                        item !== null && item.end > 7 * 60 && item.start < 9 * 60
+                    )
+                    .sort((a, b) => a.start - b.start)[0]?.entry
                 : undefined;
             const groupId = profile.role === 'estudiante' || profile.role === 'alumno'
                 ? profile.groupId
-                : currentClass?.groupId;
-            const timetableId = currentClass?.id;
+                : morningClass?.groupId;
+            const timetableId = morningClass?.id;
             await new Promise<void>((resolve, reject) => {
                 navigator.geolocation.getCurrentPosition(
                     async position => {
