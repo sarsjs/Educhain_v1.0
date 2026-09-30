@@ -179,6 +179,28 @@ export interface WorkLog {
     totalHours?: number;
 }
 
+/**
+ * Evidencia puntual de presencia física en el plantel durante la ventana
+ * automática de llegada (07:00, 07:05, 07:10, 07:15 y 07:20).
+ *
+ * No guarda coordenadas GPS crudas; conserva únicamente el resultado de la
+ * validación para reducir la exposición de ubicación precisa.
+ */
+export interface SchoolPresenceCheck {
+    id: string;
+    userId: string;
+    date: string; // YYYY-MM-DD
+    checkTime: '07:00' | '07:05' | '07:10' | '07:15' | '07:20';
+    role: UserRole;
+    inside: boolean;
+    distanceMeters: number;
+    accuracyMeters?: number;
+    confidence: 'high' | 'medium' | 'low';
+    isMocked: boolean;
+    source: 'client-gps';
+    createdAt?: FieldValue;
+}
+
 export interface ChatMessage {
     id: string;
     chatId: string;
