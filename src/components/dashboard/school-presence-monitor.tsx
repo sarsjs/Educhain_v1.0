@@ -69,16 +69,13 @@ export function SchoolPresenceMonitor() {
             const morningClass = profile.role === 'profesor'
                 ? timetableRef.current
                     .filter(entry => entry.day === currentDay)
-                    .map(entry => {
+                    .flatMap(entry => {
                         const match = entry.time.match(/(\\d{1,2}):(\\d{2})\\s*-\\s*(\\d{1,2}):(\\d{2})/);
-                        if (!match) return null;
+                        if (!match) return [];
                         const start = Number(match[1]) * 60 + Number(match[2]);
                         const end = Number(match[3]) * 60 + Number(match[4]);
-                        return { entry, start, end };
+                        return end > 7 * 60 && start < 9 * 60 ? [{ entry, start }] : [];
                     })
-                    .filter((item): item is { entry: typeof timetableRef.current[number]; start: number; end: number } =>
-                        item !== null && item.end > 7 * 60 && item.start < 9 * 60
-                    )
                     .sort((a, b) => a.start - b.start)[0]?.entry
                 : undefined;
             const groupId = profile.role === 'estudiante' || profile.role === 'alumno'
