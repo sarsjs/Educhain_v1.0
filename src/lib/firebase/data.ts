@@ -169,10 +169,15 @@ export const createCounselorClassTakeover = async (
     }
     if (takeover.date !== coverage.date) throw new Error("La fecha no corresponde a la cobertura.");
 
-    return await addDoc(collection(db, "counselor_class_takeovers"), {
+    const takeoverId = `${takeover.coverageId}_${takeover.timetableId}`;
+    const takeoverRef = doc(db, "counselor_class_takeovers", takeoverId);
+    const existingTakeover = await getDoc(takeoverRef);
+    if (existingTakeover.exists()) throw new Error("Esta clase ya fue tomada por el orientador.");
+    await setDoc(takeoverRef, {
         ...takeover,
         createdAt: serverTimestamp(),
     });
+    return takeoverRef;
 };
 
 export const fetchCounselorClassTakeovers = async (
