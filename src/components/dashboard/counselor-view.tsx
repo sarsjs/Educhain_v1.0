@@ -287,6 +287,29 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
 
       <RealTimeAttendance students={assignedStudents} attendance={attendance} />
 
+      <Card>
+        <CardHeader>
+          <CardTitle>Presencia escolar 07:00–07:20</CardTitle>
+          <CardDescription>
+            Lecturas GPS válidas de tus grupos. La falta de lectura no se interpreta automáticamente como ausencia.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-lg border p-4">
+              <p className="text-sm text-muted-foreground">Estudiantes detectados</p>
+              <p className="text-3xl font-black">{detectedStudents} / {totalStudents}</p>
+              <p className="text-xs text-muted-foreground mt-1">Al menos una detección dentro del plantel.</p>
+            </div>
+            <div className="rounded-lg border p-4">
+              <p className="text-sm text-muted-foreground">Profesores vinculados a tus grupos detectados</p>
+              <p className="text-3xl font-black">{detectedAssignedTeachers}</p>
+              <p className="text-xs text-muted-foreground mt-1">La lectura docente se vincula al primer grupo de las dos primeras horas.</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
 
       {profile?.role === 'orientador' && (
         <Card>
