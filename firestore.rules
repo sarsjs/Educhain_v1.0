@@ -208,12 +208,36 @@ service cloud.firestore {
           'distanceMeters', 'confidence', 'isMocked', 'source'
         ]) &&
         request.resource.data.checkTime in ['07:00', '07:05', '07:10', '07:15', '07:20'] &&
-        request.resource.data.source == 'client-gps';
+        request.resource.data.source == 'client-gps' &&
+        (
+          !request.resource.data.keys().hasAny(['groupId']) ||
+          (
+            request.resource.data.groupId is string &&
+            (
+              request.resource.data.role in ['estudiante', 'alumno'] &&
+              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.groupId == request.resource.data.groupId
+            ) ||
+            (
+              request.resource.data.role == 'profesor' &&
+              request.resource.data.keys().hasAny(['timetableId']) &&
+              get(/databases/$(database)/documents/timetables/$(request.resource.data.timetableId)).data.teacherId == request.auth.uid &&
+              get(/databases/$(database)/documents/timetables/$(request.resource.data.timetableId)).data.groupId == request.resource.data.groupId
+            )
+          )
+        );
 
       allow read: if request.auth != null &&
         (
           request.auth.uid == resource.data.userId ||
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['director', 'admin']
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['director', 'admin'] ||
+          (
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'orientador' &&
+            resource.data.keys().hasAny(['groupId']) &&
+            (
+              get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.counselorId == request.auth.uid ||
+              get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.tempCounselorId == request.auth.uid
+            )
+          )
         );
 
       allow update, delete: if request.auth != null &&
