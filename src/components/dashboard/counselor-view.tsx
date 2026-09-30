@@ -40,6 +40,7 @@ import {
   fetchCounselorCoveragesForCounselor,
   fetchCounselorIncidentReports,
   createCounselorIncidentReport,
+  closeCounselorCoverage,
   isCounselorCoverageActive,
   addStudent,
   addTimetableEntry,
@@ -82,6 +83,8 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
   const [reportStudentId, setReportStudentId] = React.useState('');
   const [reportSummary, setReportSummary] = React.useState('');
   const [reportAction, setReportAction] = React.useState('');
+  const [closingCoverageId, setClosingCoverageId] = React.useState('');
+  const [closingSummary, setClosingSummary] = React.useState('');
   const [substituteId, setSubstituteId] = React.useState('');
   const [substituteGroupIds, setSubstituteGroupIds] = React.useState<string[]>([]);
   const [substituteDate, setSubstituteDate] = React.useState('');
@@ -742,6 +745,35 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
               }}>Registrar novedad</Button>
             </>
           )}
+          {coverageRecords.filter((coverage) => coverage.status === 'active').length > 0 && (
+            <div className="border-t pt-4 space-y-3">
+              <p className="font-semibold">Cierre de cobertura</p>
+              <p className="text-sm text-muted-foreground">Al terminar, deja constancia de cómo concluyó la sustitución. Si no ocurrió nada, también se registra.</p>
+              <Select value={closingCoverageId} onValueChange={setClosingCoverageId}>
+                <SelectTrigger><SelectValue placeholder="Seleccionar cobertura a cerrar" /></SelectTrigger>
+                <SelectContent>
+                  {coverageRecords.filter((coverage) => coverage.status === 'active').map((coverage) => {
+                    const group = groups.find((item) => item.id === coverage.groupId);
+                    return <SelectItem key={coverage.id} value={coverage.id}>{group?.name || coverage.groupId} · {coverage.date} · {coverage.startTime}–{coverage.endTime}</SelectItem>;
+                  })}
+                </SelectContent>
+              </Select>
+              <Input value={closingSummary} onChange={(event) => setClosingSummary(event.target.value)} placeholder="Ej. Cobertura concluida sin incidencias." />
+              <Button disabled={!closingCoverageId || !closingSummary.trim()} onClick={async () => {
+                try {
+                  await closeCounselorCoverage(closingCoverageId, currentUser.id, closingSummary);
+                  setCoverageRecords(await fetchCounselorCoveragesForCounselor(currentUser.id, todayKey));
+                  setClosingCoverageId('');
+                  setClosingSummary('');
+                  toast({ title: 'Cobertura cerrada', description: 'El cierre quedó asentado en el historial.' });
+                } catch (error) {
+                  console.error(error);
+                  toast({ title: 'No se pudo cerrar', description: error instanceof Error ? error.message : 'Intenta nuevamente.' });
+                }
+              }}>Cerrar cobertura</Button>
+            </div>
+          )}
+
           {incidentReports.length > 0 && (
             <div className="border-t pt-4 space-y-3">
               <p className="font-semibold">Novedades registradas</p>
