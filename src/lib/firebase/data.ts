@@ -812,7 +812,7 @@ export const fetchWorkLogs = async (date?: string, userId?: string): Promise<Wor
 /**
  * Generates a temporary 4-digit code for a class session.
  */
-export const generateAttendanceToken = async (subjectId: string, groupId: string, timetableId: string) => {
+export const generateAttendanceToken = async (subjectId: string, groupId: string, timetableId: string, options?: { coverageId?: string; createdBy?: string; createdByRole?: User['role'] }) => {
     const code = Math.floor(1000 + Math.random() * 9000).toString();
     const date = getTodayDateKey();
     const tokenData = {
@@ -821,6 +821,9 @@ export const generateAttendanceToken = async (subjectId: string, groupId: string
         timetableId,
         code,
         date,
+        ...(options?.coverageId ? { coverageId: options.coverageId } : {}),
+        ...(options?.createdBy ? { createdBy: options.createdBy } : {}),
+        ...(options?.createdByRole ? { createdByRole: options.createdByRole } : {}),
         expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes validity
         createdAt: serverTimestamp()
     };
