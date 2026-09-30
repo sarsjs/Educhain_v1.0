@@ -190,6 +190,9 @@ export interface SchoolPresenceCheck {
     id: string;
     userId: string;
     date: string; // YYYY-MM-DD
+    /** Grupo relacionado cuando la observación permite acotar la visibilidad del orientador. */
+    groupId?: string;
+    timetableId?: string;
     checkTime: '07:00' | '07:05' | '07:10' | '07:15' | '07:20';
     role: UserRole;
     inside: boolean;
