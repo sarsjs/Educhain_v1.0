@@ -2,7 +2,7 @@ import { collection, getDocs, addDoc, doc, deleteDoc, query, where, updateDoc, w
 import { db, storage } from "./client";
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
-import type { User, Group, Subject, TimetableEntry, Attendance, Message, Grade, CalendarEvent, SubstitutionRequest, CounselorCoverage, CounselorIncidentReport, WorkLog, ActivityLog, ChatMessage, SchoolPresenceCheck } from "@/lib/types";
+import type { User, Group, Subject, TimetableEntry, Attendance, Message, Grade, CalendarEvent, SubstitutionRequest, CounselorCoverage, CounselorClassTakeover, CounselorIncidentReport, WorkLog, ActivityLog, ChatMessage, SchoolPresenceCheck } from "@/lib/types";
 
 const fetchData = async <T>(fetchFunction: () => Promise<T[]>, entityName: string): Promise<T[]> => {
     try {
@@ -138,6 +138,58 @@ export const closeCounselorCoverage = async (
         closingSummary: closingSummary.trim(),
     });
 };
+
+export const createCounselorClassTakeover = async (
+    takeover: Omit<CounselorClassTakeover, 'id' | 'createdAt'>
+) => {
+    const coverageSnap = await getDoc(doc(db, "counselor_coverages", takeover.coverageId));
+    if (!coverageSnap.exists()) throw new Error("La cobertura ya no existe.");
+    const coverage = { id: coverageSnap.id, ...coverageSnap.data() } as CounselorCoverage;
+    if (coverage.substituteCounselorId !== takeover.counselorId) {
+        throw new Error("Solo el orientador sustituto puede tomar este grupo.");
+    }
+    if (!isCounselorCoverageActive(coverage)) {
+        throw new Error("La cobertura no está activa en este momento.");
+    }
+    if (coverage.groupId !== takeover.groupId) {
+        throw new Error("El grupo no corresponde a la cobertura.");
+    }
+    const timetableSnap = await getDoc(doc(db, "timetables", takeover.timetableId));
+    if (!timetableSnap.exists()) throw new Error("La clase programada ya no existe.");
+    const timetable = timetableSnap.data() as TimetableEntry;
+    if (timetable.groupId !== takeover.groupId || timetable.subjectId !== takeover.subjectId) {
+        throw new Error("La clase no corresponde al grupo o materia indicados.");
+    }
+    const subjectSnap = await getDoc(doc(db, "subjects", takeover.subjectId));
+    if (!subjectSnap.exists()) throw new Error("La materia ya no existe.");
+    const subject = subjectSnap.data() as Subject;
+    const scheduledTeacherId = timetable.teacherId || subject.teacherId;
+    if (!scheduledTeacherId || scheduledTeacherId !== takeover.teacherId) {
+        throw new Error("El profesor indicado no corresponde a la clase programada.");
+    }
+    if (takeover.date !== coverage.date) throw new Error("La fecha no corresponde a la cobertura.");
+
+    return await addDoc(collection(db, "counselor_class_takeovers"), {
+        ...takeover,
+        createdAt: serverTimestamp(),
+    });
+};
+
+export const fetchCounselorClassTakeovers = async (
+    coverageIds: string[]
+): Promise<CounselorClassTakeover[]> => fetchData(async () => {
+    if (coverageIds.length === 0) return [];
+    const results: CounselorClassTakeover[] = [];
+    for (let i = 0; i < coverageIds.length; i += 30) {
+        const chunk = coverageIds.slice(i, i + 30);
+        const snapshot = await getDocs(query(
+            collection(db, "counselor_class_takeovers"),
+            where("coverageId", "in", chunk)
+        ));
+        results.push(...snapshot.docs.map(item => ({ id: item.id, ...item.data() } as CounselorClassTakeover)));
+    }
+    return results;
+}, 'counselor class takeovers');
 
 export const createCounselorIncidentReport = async (
     report: Omit<CounselorIncidentReport, 'id' | 'createdAt'>
