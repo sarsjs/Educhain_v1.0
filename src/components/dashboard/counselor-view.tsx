@@ -37,10 +37,14 @@ import {
   fetchSubstitutionRequests,
   createSubstitutionRequest,
   handleSubstitutionRequest,
+  fetchCounselorCoveragesForCounselor,
+  fetchCounselorIncidentReports,
+  createCounselorIncidentReport,
+  isCounselorCoverageActive,
   addStudent,
   addTimetableEntry,
 } from '@/lib/firebase/data';
-import type { Student, Group, Subject, TimetableEntry, SecurityAlert, User, SubstitutionRequest } from '@/lib/types';
+import type { Student, Group, Subject, TimetableEntry, SecurityAlert, User, SubstitutionRequest, CounselorCoverage, CounselorIncidentReport, CounselorIncidentType } from '@/lib/types';
 import { Input } from '@/components/ui/input';
 import {
   Dialog,
@@ -71,6 +75,13 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
   const [presenceChecks, setPresenceChecks] = React.useState<import('@/lib/types').SchoolPresenceCheck[]>([]);
   const [otherCounselors, setOtherCounselors] = React.useState<User[]>([]);
   const [substitutionRequests, setSubstitutionRequests] = React.useState<SubstitutionRequest[]>([]);
+  const [coverageRecords, setCoverageRecords] = React.useState<CounselorCoverage[]>([]);
+  const [incidentReports, setIncidentReports] = React.useState<CounselorIncidentReport[]>([]);
+  const [reportCoverageId, setReportCoverageId] = React.useState('');
+  const [reportType, setReportType] = React.useState<CounselorIncidentType>('late_arrival');
+  const [reportStudentId, setReportStudentId] = React.useState('');
+  const [reportSummary, setReportSummary] = React.useState('');
+  const [reportAction, setReportAction] = React.useState('');
   const [substituteId, setSubstituteId] = React.useState('');
   const [substituteGroupIds, setSubstituteGroupIds] = React.useState<string[]>([]);
   const [substituteDate, setSubstituteDate] = React.useState('');
@@ -138,7 +149,7 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
     try {
       const today = new Date();
       const todayKey = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
-      const [groupsData, subjectsData, teachersData, alertsData, attendanceData, counselorsData, requestsData] = await Promise.all([
+      const [groupsData, subjectsData, teachersData, alertsData, attendanceData, counselorsData, requestsData, coveragesData] = await Promise.all([
         fetchGroupsByCounselor(currentUser.id),
         fetchSubjects(),
         fetchUsersByRole('profesor'),
@@ -146,11 +157,15 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
         fetchAttendanceForDate(todayKey),
         fetchUsersByRole('orientador'),
         fetchSubstitutionRequests(currentUser.id),
+        fetchCounselorCoveragesForCounselor(currentUser.id, todayKey),
       ]);
       const assignedGroupIds = groupsData.map((group) => group.id);
-      const [studentResults, timetableData] = await Promise.all([
-        Promise.all(assignedGroupIds.map((groupId) => fetchStudentsByGroup(groupId))),
+      const coverageGroupIds = [...new Set(coveragesData.map((coverage) => coverage.groupId))];
+      const relevantGroupIds = [...new Set([...assignedGroupIds, ...coverageGroupIds])];
+      const [studentResults, timetableData, reportData] = await Promise.all([
+        Promise.all(relevantGroupIds.map((groupId) => fetchStudentsByGroup(groupId))),
         fetchTimetableByGroups(assignedGroupIds),
+        fetchCounselorIncidentReports(coveragesData.map((coverage) => coverage.id)),
       ]);
       setStudents(studentResults.flat());
       setGroups(groupsData);
@@ -158,6 +173,8 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
       setTeachers(teachersData);
       setOtherCounselors(counselorsData.filter(counselor => counselor.id !== currentUser.id));
       setSubstitutionRequests(requestsData);
+      setCoverageRecords(coveragesData);
+      setIncidentReports(reportData);
       setTimetable(timetableData);
       setSecurityAlerts(alertsData);
       setAttendance(attendanceData);
@@ -626,6 +643,123 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
               </div>
             </div>)}
           </div>}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Bitácora de novedades durante sustituciones</CardTitle>
+          <CardDescription>
+            Registra cualquier situación ocurrida mientras cubres a otro orientador. No modifica automáticamente la asistencia: deja constancia de lo sucedido.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {coverageRecords.filter((coverage) => isCounselorCoverageActive(coverage)).length === 0 ? (
+            <p className="text-sm text-muted-foreground">No tienes una cobertura activa en este momento.</p>
+          ) : (
+            <>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Cobertura / grupo</label>
+                  <Select value={reportCoverageId} onValueChange={(value) => { setReportCoverageId(value); setReportStudentId(''); }}>
+                    <SelectTrigger><SelectValue placeholder="Seleccionar grupo cubierto" /></SelectTrigger>
+                    <SelectContent>
+                      {coverageRecords.filter((coverage) => isCounselorCoverageActive(coverage)).map((coverage) => {
+                        const group = groups.find((item) => item.id === coverage.groupId);
+                        return <SelectItem key={coverage.id} value={coverage.id}>{group?.name || coverage.groupId} · {coverage.startTime}–{coverage.endTime}</SelectItem>;
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Tipo de novedad</label>
+                  <Select value={reportType} onValueChange={(value) => setReportType(value as CounselorIncidentType)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="late_arrival">Llegada tarde</SelectItem>
+                      <SelectItem value="attendance_exception">Excepción de asistencia</SelectItem>
+                      <SelectItem value="student_incident">Incidencia con alumno</SelectItem>
+                      <SelectItem value="teacher_incident">Incidencia con profesor</SelectItem>
+                      <SelectItem value="group_incident">Incidencia del grupo</SelectItem>
+                      <SelectItem value="other">Otra novedad</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              {reportCoverageId && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Alumno involucrado (opcional)</label>
+                  <Select value={reportStudentId || "none"} onValueChange={(value) => setReportStudentId(value === "none" ? "" : value)}>
+                    <SelectTrigger><SelectValue placeholder="Ninguno" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Ninguno</SelectItem>
+                      {students.filter((student) => {
+                        const coverage = coverageRecords.find((item) => item.id === reportCoverageId);
+                        return coverage?.groupId === student.groupId;
+                      }).map((student) => <SelectItem key={student.id} value={student.id}>{student.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Qué ocurrió</label>
+                <Input value={reportSummary} onChange={(event) => setReportSummary(event.target.value)} placeholder="Ej. El alumno llegó 15 minutos tarde; se permitió su ingreso y se registró la situación." />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Qué se hizo / resolución (opcional)</label>
+                <Input value={reportAction} onChange={(event) => setReportAction(event.target.value)} placeholder="Ej. Se permitió el acceso y se informó al alumno." />
+              </div>
+              <Button disabled={!reportCoverageId || !reportSummary.trim()} onClick={async () => {
+                const coverage = coverageRecords.find((item) => item.id === reportCoverageId);
+                const student = students.find((item) => item.id === reportStudentId);
+                if (!coverage) return;
+                const now = new Date();
+                const time = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+                try {
+                  await createCounselorIncidentReport({
+                    coverageId: coverage.id,
+                    groupId: coverage.groupId,
+                    date: coverage.date,
+                    time,
+                    type: reportType,
+                    studentId: student?.id,
+                    studentName: student?.name,
+                    summary: reportSummary.trim(),
+                    actionTaken: reportAction.trim() || undefined,
+                    createdBy: currentUser.id,
+                    createdByName: currentUser.name,
+                    createdByRole: 'orientador',
+                  });
+                  setReportSummary('');
+                  setReportAction('');
+                  setReportStudentId('');
+                  setIncidentReports(await fetchCounselorIncidentReports(coverageRecords.map((item) => item.id)));
+                  toast({ title: 'Novedad registrada', description: 'Quedó asentada en la bitácora de la cobertura.' });
+                } catch (error) {
+                  console.error(error);
+                  toast({ title: 'No se pudo registrar', description: error instanceof Error ? error.message : 'La cobertura ya no está activa.' });
+                }
+              }}>Registrar novedad</Button>
+            </>
+          )}
+          {incidentReports.length > 0 && (
+            <div className="border-t pt-4 space-y-3">
+              <p className="font-semibold">Novedades registradas</p>
+              {incidentReports.slice(0, 10).map((report) => {
+                const group = groups.find((item) => item.id === report.groupId);
+                return <div key={report.id} className="rounded-lg border p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-medium">{group?.name || report.groupId} · {report.date} {report.time}</p>
+                    <span className="text-xs rounded-full bg-muted px-2 py-1">{report.type}</span>
+                  </div>
+                  {report.studentName && <p className="text-sm mt-1"><strong>Alumno:</strong> {report.studentName}</p>}
+                  <p className="text-sm mt-1"><strong>Situación:</strong> {report.summary}</p>
+                  {report.actionTaken && <p className="text-sm mt-1"><strong>Acción:</strong> {report.actionTaken}</p>}
+                  <p className="text-xs text-muted-foreground mt-2">Registró: {report.createdByName}</p>
+                </div>;
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
 
