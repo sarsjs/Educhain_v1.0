@@ -158,6 +158,24 @@ export type CounselorIncidentType =
     | 'group_incident'
     | 'other';
 
+export type CounselorTakeoverReason = 'teacher_absent' | 'teacher_unavailable' | 'other';
+
+export interface CounselorClassTakeover {
+    id: string;
+    coverageId: string;
+    groupId: string;
+    timetableId: string;
+    subjectId: string;
+    teacherId: string;
+    counselorId: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    reason: CounselorTakeoverReason;
+    note?: string;
+    createdAt: FieldValue;
+}
+
 export interface CounselorIncidentReport {
     id: string;
     coverageId: string;
