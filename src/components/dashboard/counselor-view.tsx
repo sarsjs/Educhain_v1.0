@@ -45,6 +45,7 @@ import {
   isCounselorCoverageActive,
   addStudent,
   addTimetableEntry,
+  generateAttendanceToken,
 } from '@/lib/firebase/data';
 import type { Student, Group, Subject, TimetableEntry, SecurityAlert, User, SubstitutionRequest, CounselorCoverage, CounselorIncidentReport, CounselorIncidentType } from '@/lib/types';
 import { Input } from '@/components/ui/input';
@@ -66,6 +67,19 @@ import { MessagePanel } from './message-panel';
 import { RealTimeAttendance } from './real-time-attendance';
 import { NotificationPanel } from './notification-panel';
 
+const isCurrentCounselorTimetableEntry = (entry: TimetableEntry) => {
+  const dayIndex = new Date().getDay();
+  const day = dayIndex >= 1 && dayIndex <= 5 ? (['Lunes','Martes','Miércoles','Jueves','Viernes'] as const)[dayIndex - 1] : null;
+  if (entry.day !== day) return false;
+  const match = entry.time.match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
+  if (!match) return false;
+  const now = new Date();
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  const start = Number(match[1]) * 60 + Number(match[2]);
+  const end = Number(match[3]) * 60 + Number(match[4]);
+  return minutes >= start && minutes < end;
+};
+
 export function CounselorView({ currentUser }: { currentUser: User }) {
   const [students, setStudents] = React.useState<Student[]>([]);
   const [groups, setGroups] = React.useState<Group[]>([]);
@@ -86,6 +100,8 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
   const [reportAction, setReportAction] = React.useState('');
   const [closingCoverageId, setClosingCoverageId] = React.useState('');
   const [closingSummary, setClosingSummary] = React.useState('');
+  const [activeCoverageToken, setActiveCoverageToken] = React.useState<{ code: string; expiresAt: number; groupId: string; subjectId: string; timetableId: string; coverageId: string } | null>(null);
+  const [coverageTokenCountdown, setCoverageTokenCountdown] = React.useState(0);
   const [substituteId, setSubstituteId] = React.useState('');
   const [substituteGroupIds, setSubstituteGroupIds] = React.useState<string[]>([]);
   const [substituteDate, setSubstituteDate] = React.useState('');
@@ -142,6 +158,18 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
   const [newScheduleGroupId, setNewScheduleGroupId] = React.useState(
     assignedGroupIds[0] ?? ''
   );
+
+  React.useEffect(() => {
+    if (!activeCoverageToken) return;
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((activeCoverageToken.expiresAt - Date.now()) / 1000));
+      setCoverageTokenCountdown(remaining);
+      if (remaining <= 0) setActiveCoverageToken(null);
+    };
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [activeCoverageToken]);
 
   const daysOfWeek: TimetableEntry['day'][] = [
     'Lunes',
@@ -652,6 +680,53 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
               </div>
             </div>)}
           </div>}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Pase de lista durante cobertura</CardTitle>
+          <CardDescription>Si el profesor está ausente, el orientador sustituto puede generar el código únicamente para un grupo que tenga una cobertura activa.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {coverageRecords.filter((coverage) => isCounselorCoverageActive(coverage)).length === 0 ? (
+            <p className="text-sm text-muted-foreground">No tienes grupos bajo cobertura activa en este momento.</p>
+          ) : (
+            coverageRecords.filter((coverage) => isCounselorCoverageActive(coverage)).map((coverage) => {
+              const group = groups.find((item) => item.id === coverage.groupId);
+              const currentEntry = timetable.find((entry) => entry.groupId === coverage.groupId && isCurrentCounselorTimetableEntry(entry));
+              const subject = currentEntry ? subjects.find((item) => item.id === currentEntry.subjectId) : undefined;
+              const tokenActive = activeCoverageToken?.coverageId === coverage.id;
+              return <div key={coverage.id} className="rounded-xl border p-4 space-y-3">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div>
+                    <p className="font-bold">{group?.name || coverage.groupId}</p>
+                    <p className="text-sm text-muted-foreground">{subject?.name || 'Sin clase actual'}{currentEntry ? ' · ' + currentEntry.time : ''}</p>
+                  </div>
+                  {tokenActive ? (
+                    <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3">
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground">Código de pase</p>
+                      <p className="text-3xl font-black tracking-[0.25em] text-primary">{activeCoverageToken.code}</p>
+                      <p className="text-xs text-muted-foreground">Expira en {Math.floor(coverageTokenCountdown / 60)}:{String(coverageTokenCountdown % 60).padStart(2, '0')}</p>
+                    </div>
+                  ) : (
+                    <Button disabled={!currentEntry || !subject} onClick={async () => {
+                      if (!currentEntry) return;
+                      try {
+                        const token = await generateAttendanceToken(currentEntry.subjectId, coverage.groupId, currentEntry.id, { coverageId: coverage.id, createdBy: currentUser.id, createdByRole: 'orientador' });
+                        setActiveCoverageToken({ code: token.code, expiresAt: Date.now() + 5 * 60 * 1000, groupId: coverage.groupId, subjectId: currentEntry.subjectId, timetableId: currentEntry.id, coverageId: coverage.id });
+                        toast({ title: 'Pase de lista iniciado', description: 'Código generado para ' + (group?.name || 'el grupo cubierto') + '.' });
+                      } catch (error) {
+                        console.error(error);
+                        toast({ title: 'No se pudo iniciar el pase', description: 'La cobertura puede haber terminado o el horario no corresponde.', variant: 'destructive' });
+                      }
+                    }}>Generar código</Button>
+                  )}
+                </div>
+                {!currentEntry && <p className="text-xs text-muted-foreground">El código solo puede generarse durante una clase programada de este grupo.</p>}
+              </div>;
+            })
+          )}
         </CardContent>
       </Card>
 
