@@ -258,9 +258,10 @@ service cloud.firestore {
         request.resource.data.primaryCounselorId is string &&
         request.resource.data.substituteCounselorId == request.auth.uid &&
         request.resource.data.groupId is string &&
+        get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.counselorId == request.resource.data.primaryCounselorId &&
         (
-          get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.counselorId == request.auth.uid ||
-          get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.tempCounselorId == request.auth.uid
+          get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.counselorId == request.resource.data.primaryCounselorId ||
+          get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.tempCounselorId == request.resource.data.primaryCounselorId
         );
 
       allow update, delete: if request.auth != null && (
