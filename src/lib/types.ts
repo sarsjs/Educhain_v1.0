@@ -139,9 +139,36 @@ export interface CounselorCoverage {
     date: string; // YYYY-MM-DD
     startTime: string; // HH:MM
     endTime: string; // HH:MM
+    startsAt?: FieldValue;
+    endsAt?: FieldValue;
     reason?: string;
     status: 'active' | 'cancelled' | 'expired';
     createdBy: string;
+    createdAt: FieldValue;
+}
+
+export type CounselorIncidentType =
+    | 'late_arrival'
+    | 'attendance_exception'
+    | 'student_incident'
+    | 'teacher_incident'
+    | 'group_incident'
+    | 'other';
+
+export interface CounselorIncidentReport {
+    id: string;
+    coverageId: string;
+    groupId: string;
+    date: string;
+    time: string;
+    type: CounselorIncidentType;
+    studentId?: string;
+    studentName?: string;
+    summary: string;
+    actionTaken?: string;
+    createdBy: string;
+    createdByName: string;
+    createdByRole: 'orientador' | 'director';
     createdAt: FieldValue;
 }
 
