@@ -2,7 +2,7 @@ import { collection, getDocs, addDoc, doc, deleteDoc, query, where, updateDoc, w
 import { db, storage } from "./client";
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
-import type { User, Group, Subject, TimetableEntry, Attendance, Message, Grade, CalendarEvent, SubstitutionRequest, WorkLog, ActivityLog, ChatMessage } from "@/lib/types";
+import type { User, Group, Subject, TimetableEntry, Attendance, Message, Grade, CalendarEvent, SubstitutionRequest, WorkLog, ActivityLog, ChatMessage, SchoolPresenceCheck } from "@/lib/types";
 
 const fetchData = async <T>(fetchFunction: () => Promise<T[]>, entityName: string): Promise<T[]> => {
     try {
@@ -605,6 +605,24 @@ export const sendMessage = async (message: Omit<Message, "id" | "timestamp">) =>
         timestamp: serverTimestamp()
     });
 };
+
+/**
+ * Guarda una observación de presencia general en el plantel.
+ * El ID es determinista por usuario/día/intervalo para evitar duplicados.
+ */
+export const recordSchoolPresenceCheck = async (check: Omit<SchoolPresenceCheck, "id" | "createdAt">) => {
+    const id = check.userId + "_" + check.date + "_" + check.checkTime.replace(":", "");
+    const ref = doc(db, "school_presence_checks", id);
+    await setDoc(ref, { ...check, createdAt: serverTimestamp() }, { merge: true });
+    return id;
+};
+
+export const fetchSchoolPresenceChecks = async (date: string, userId?: string): Promise<SchoolPresenceCheck[]> => fetchData(async () => {
+    let q = query(collection(db, "school_presence_checks"), where("date", "==", date));
+    if (userId) q = query(q, where("userId", "==", userId));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(item => ({ id: item.id, ...item.data() } as SchoolPresenceCheck));
+}, "school presence checks");
 
 export const updateUserStatus = async (userId: string, status: 'inside' | 'outside' | 'coming' | 'unknown', userName?: string) => {
     const userRef = doc(db, "users", userId);
