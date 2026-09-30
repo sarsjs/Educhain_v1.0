@@ -30,6 +30,7 @@ import {
   fetchSubjects,
   fetchUsersByRole,
   fetchTimetableByGroups,
+  fetchGroupById,
   fetchStudentsByGroup,
   fetchSecurityAlerts,
   fetchAttendanceForDate,
