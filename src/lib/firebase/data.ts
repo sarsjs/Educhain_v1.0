@@ -2,7 +2,7 @@ import { collection, getDocs, addDoc, doc, deleteDoc, query, where, updateDoc, w
 import { db, storage } from "./client";
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
-import type { User, Group, Subject, TimetableEntry, Attendance, Message, Grade, CalendarEvent, SubstitutionRequest, WorkLog, ActivityLog, ChatMessage, SchoolPresenceCheck } from "@/lib/types";
+import type { User, Group, Subject, TimetableEntry, Attendance, Message, Grade, CalendarEvent, SubstitutionRequest, CounselorCoverage, WorkLog, ActivityLog, ChatMessage, SchoolPresenceCheck } from "@/lib/types";
 
 const fetchData = async <T>(fetchFunction: () => Promise<T[]>, entityName: string): Promise<T[]> => {
     try {
@@ -13,8 +13,8 @@ const fetchData = async <T>(fetchFunction: () => Promise<T[]>, entityName: strin
     }
 };
 
-// Substitution Requests
-export const createSubstitutionRequest = async (request: Omit<SubstitutionRequest, 'id' | 'timestamp'>) => {
+// Temporary counselor coverage: the titular counselor remains unchanged.
+export const createSubstitutionRequest = async (request: Omit<SubstitutionRequest, 'id' | 'timestamp' | 'status'>) => {
     return await addDoc(collection(db, "substitution_requests"), {
         ...request,
         timestamp: serverTimestamp(),
@@ -29,31 +29,40 @@ export const fetchSubstitutionRequests = async (toCounselorId: string): Promise<
         where("status", "==", "pending")
     );
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as SubstitutionRequest));
+    return querySnapshot.docs.map(item => ({ id: item.id, ...item.data() } as unknown as SubstitutionRequest));
 }, 'substitution requests');
 
-export const handleSubstitutionRequest = async (requestId: string, status: 'accepted' | 'declined', requestBody?: SubstitutionRequest) => {
+export const handleSubstitutionRequest = async (
+    requestId: string,
+    status: 'accepted' | 'declined',
+    requestBody?: SubstitutionRequest
+) => {
     const requestRef = doc(db, "substitution_requests", requestId);
     await updateDoc(requestRef, { status });
 
     if (status === 'accepted' && requestBody) {
-        // Update all involved groups
         const batch = writeBatch(db);
+
         requestBody.groupIds.forEach(groupId => {
-            const groupRef = doc(db, "groups", groupId);
-            batch.update(groupRef, {
-                tempCounselorId: requestBody.toCounselorId,
-                absenceStatus: {
-                    isActive: true,
-                    message: requestBody.message || "Encargado por acuerdo entre orientadores."
-                }
-            });
+            const coverageRef = doc(collection(db, "counselor_coverages"));
+            batch.set(coverageRef, {
+                groupId,
+                primaryCounselorId: requestBody.fromCounselorId,
+                substituteCounselorId: requestBody.toCounselorId,
+                date: requestBody.date,
+                startTime: requestBody.startTime,
+                endTime: requestBody.endTime,
+                reason: requestBody.message || "Cobertura temporal entre orientadores.",
+                status: 'active',
+                createdBy: requestBody.toCounselorId,
+                createdAt: serverTimestamp()
+            } satisfies Omit<CounselorCoverage, 'id'>);
         });
+
         await batch.commit();
 
-        // Notify Director
         await addDoc(collection(db, "messages"), {
-            content: `Acuerdo de Suplencia: El orientador titular ha cedido el control de sus grupos al orientador suplente por acuerdo mutuo.`,
+            content: `Cobertura temporal: el orientador ${requestBody.toCounselorId} apoyará temporalmente los grupos acordados de ${requestBody.fromCounselorId}.`,
             recipientFilter: 'director',
             timestamp: serverTimestamp(),
             createdBy: requestBody.fromCounselorId,
@@ -61,6 +70,20 @@ export const handleSubstitutionRequest = async (requestId: string, status: 'acce
         });
     }
 };
+
+export const fetchCounselorCoverages = async (
+    groupIds: string[],
+    date: string
+): Promise<CounselorCoverage[]> => fetchData(async () => {
+    if (groupIds.length === 0) return [];
+    const q = query(
+        collection(db, "counselor_coverages"),
+        where("date", "==", date),
+        where("groupId", "in", groupIds.slice(0, 30))
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(item => ({ id: item.id, ...item.data() } as CounselorCoverage));
+}, 'counselor coverages');
 
 // Fetch functions
 export const fetchUsers = async (): Promise<User[]> => fetchData(async () => {
