@@ -1,8 +1,8 @@
-import { collection, getDocs, addDoc, doc, deleteDoc, query, where, updateDoc, writeBatch, orderBy, serverTimestamp, getDoc, deleteField, limit, onSnapshot, arrayUnion, setDoc } from "firebase/firestore";
+import { collection, getDocs, addDoc, doc, deleteDoc, query, where, updateDoc, writeBatch, orderBy, serverTimestamp, getDoc, deleteField, limit, onSnapshot, arrayUnion, setDoc, Timestamp } from "firebase/firestore";
 import { db, storage } from "./client";
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
-import type { User, Group, Subject, TimetableEntry, Attendance, Message, Grade, CalendarEvent, SubstitutionRequest, CounselorCoverage, WorkLog, ActivityLog, ChatMessage, SchoolPresenceCheck } from "@/lib/types";
+import type { User, Group, Subject, TimetableEntry, Attendance, Message, Grade, CalendarEvent, SubstitutionRequest, CounselorCoverage, CounselorIncidentReport, WorkLog, ActivityLog, ChatMessage, SchoolPresenceCheck } from "@/lib/types";
 
 const fetchData = async <T>(fetchFunction: () => Promise<T[]>, entityName: string): Promise<T[]> => {
     try {
@@ -53,6 +53,8 @@ export const handleSubstitutionRequest = async (
                 reason: requestBody.message || "Cobertura temporal entre orientadores.",
                 status: 'active',
                 createdBy: requestBody.toCounselorId,
+                startsAt: Timestamp.fromDate(coverageDateTime(requestBody.date, requestBody.startTime)),
+                endsAt: Timestamp.fromDate(coverageDateTime(requestBody.date, requestBody.endTime)),
                 createdAt: serverTimestamp()
             } satisfies Omit<CounselorCoverage, 'id'>);
         });
@@ -82,6 +84,75 @@ export const fetchCounselorCoverages = async (
     const snapshot = await getDocs(q);
     return snapshot.docs.map(item => ({ id: item.id, ...item.data() } as CounselorCoverage));
 }, 'counselor coverages');
+
+const coverageDateTime = (date: string, time: string) => {
+    const [year, month, day] = date.split('-').map(Number);
+    const [hour, minute] = time.split(':').map(Number);
+    return new Date(year, month - 1, day, hour, minute, 0, 0);
+};
+
+export const fetchCounselorCoveragesForCounselor = async (
+    counselorId: string,
+    date?: string
+): Promise<CounselorCoverage[]> => fetchData(async () => {
+    const [asSubstitute, asPrimary] = await Promise.all([
+        getDocs(query(collection(db, "counselor_coverages"), where("substituteCounselorId", "==", counselorId))),
+        getDocs(query(collection(db, "counselor_coverages"), where("primaryCounselorId", "==", counselorId))),
+    ]);
+    const map = new Map<string, CounselorCoverage>();
+    [...asSubstitute.docs, ...asPrimary.docs].forEach(item => {
+        const coverage = { id: item.id, ...item.data() } as CounselorCoverage;
+        if (!date || coverage.date === date) map.set(coverage.id, coverage);
+    });
+    return Array.from(map.values());
+}, 'counselor coverages for counselor');
+
+export const isCounselorCoverageActive = (coverage: CounselorCoverage, now = new Date()) => {
+    if (coverage.status !== 'active') return false;
+    const start = coverage.startsAt && typeof (coverage.startsAt as any).toDate === 'function'
+        ? (coverage.startsAt as any).toDate()
+        : coverageDateTime(coverage.date, coverage.startTime);
+    const end = coverage.endsAt && typeof (coverage.endsAt as any).toDate === 'function'
+        ? (coverage.endsAt as any).toDate()
+        : coverageDateTime(coverage.date, coverage.endTime);
+    return now >= start && now <= end;
+};
+
+export const createCounselorIncidentReport = async (
+    report: Omit<CounselorIncidentReport, 'id' | 'createdAt'>
+) => {
+    const coverageSnap = await getDoc(doc(db, "counselor_coverages", report.coverageId));
+    if (!coverageSnap.exists()) throw new Error("La cobertura ya no existe.");
+
+    const coverage = { id: coverageSnap.id, ...coverageSnap.data() } as CounselorCoverage;
+    if (coverage.substituteCounselorId !== report.createdBy && coverage.primaryCounselorId !== report.createdBy) {
+        throw new Error("No tienes autorización para registrar novedades de esta cobertura.");
+    }
+    if (!isCounselorCoverageActive(coverage) && report.createdByRole !== 'director') {
+        throw new Error("La cobertura no está activa en este momento.");
+    }
+
+    return await addDoc(collection(db, "counselor_incident_reports"), {
+        ...report,
+        createdAt: serverTimestamp(),
+    });
+};
+
+export const fetchCounselorIncidentReports = async (
+    coverageIds: string[]
+): Promise<CounselorIncidentReport[]> => fetchData(async () => {
+    if (coverageIds.length === 0) return [];
+    const results: CounselorIncidentReport[] = [];
+    for (let i = 0; i < coverageIds.length; i += 30) {
+        const chunk = coverageIds.slice(i, i + 30);
+        const snapshot = await getDocs(query(
+            collection(db, "counselor_incident_reports"),
+            where("coverageId", "in", chunk)
+        ));
+        results.push(...snapshot.docs.map(item => ({ id: item.id, ...item.data() } as CounselorIncidentReport)));
+    }
+    return results.sort((x, y) => (y.date + " " + y.time).localeCompare(x.date + " " + x.time));
+}, 'counselor incident reports');
 
 // Fetch functions
 export const fetchUsers = async (): Promise<User[]> => fetchData(async () => {
