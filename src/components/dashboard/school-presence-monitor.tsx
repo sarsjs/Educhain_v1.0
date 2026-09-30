@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useAuth } from '@/context/auth-context';
-import { recordSchoolPresenceCheck } from '@/lib/firebase/data';
+import { fetchTimetableByTeacher, recordSchoolPresenceCheck } from '@/lib/firebase/data';
 import { verifyUserLocation } from '@/lib/gps-utils';
 
 const PRESENCE_MINUTES = [0, 5, 10, 15, 20] as const;
@@ -41,6 +41,7 @@ export function SchoolPresenceMonitor() {
     const { profile } = useAuth();
     const runningRef = React.useRef(false);
     const handledSlotsRef = React.useRef<Set<string>>(new Set());
+    const timetableRef = React.useRef<Awaited<ReturnType<typeof fetchTimetableByTeacher>>>([]);
 
     const runCheck = React.useCallback(async (expectedMinute?: PresenceMinute) => {
         if (!profile || !ACTIVE_ROLES.includes(profile.role as typeof ACTIVE_ROLES[number]) || !navigator.geolocation) {
@@ -59,6 +60,25 @@ export function SchoolPresenceMonitor() {
         runningRef.current = true;
 
         try {
+            if (profile.role === 'profesor' && timetableRef.current.length === 0) {
+                timetableRef.current = await fetchTimetableByTeacher(profile.id);
+            }
+            const currentDay = new Intl.DateTimeFormat('es-MX', { weekday: 'long' }).format(now).replace(/^./, c => c.toUpperCase()) as 'Lunes' | 'Martes' | 'Miércoles' | 'Jueves' | 'Viernes';
+            const minutes = now.getHours() * 60 + now.getMinutes();
+            const currentClass = profile.role === 'profesor'
+                ? timetableRef.current.find(entry => {
+                    if (entry.day !== currentDay) return false;
+                    const match = entry.time.match(/(\\d{1,2}):(\\d{2})\\s*-\\s*(\\d{1,2}):(\\d{2})/);
+                    if (!match) return false;
+                    const start = Number(match[1]) * 60 + Number(match[2]);
+                    const end = Number(match[3]) * 60 + Number(match[4]);
+                    return minutes >= start && minutes < end;
+                })
+                : undefined;
+            const groupId = profile.role === 'estudiante' || profile.role === 'alumno'
+                ? profile.groupId
+                : currentClass?.groupId;
+            const timetableId = currentClass?.id;
             await new Promise<void>((resolve, reject) => {
                 navigator.geolocation.getCurrentPosition(
                     async position => {
@@ -69,6 +89,8 @@ export function SchoolPresenceMonitor() {
                                 date,
                                 checkTime,
                                 role: profile.role,
+                                groupId,
+                                timetableId,
                                 inside: result.isInside && !result.isMocked,
                                 distanceMeters: Math.round(result.distance),
                                 accuracyMeters: Math.round(position.coords.accuracy),
