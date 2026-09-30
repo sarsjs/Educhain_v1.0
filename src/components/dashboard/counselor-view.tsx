@@ -33,6 +33,7 @@ import {
   fetchStudentsByGroup,
   fetchSecurityAlerts,
   fetchAttendanceForDate,
+  fetchSchoolPresenceChecks,
   addStudent,
   addTimetableEntry,
 } from '@/lib/firebase/data';
@@ -64,6 +65,7 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
   const [timetable, setTimetable] = React.useState<TimetableEntry[]>([]);
   const [securityAlerts, setSecurityAlerts] = React.useState<SecurityAlert[]>([]);
   const [attendance, setAttendance] = React.useState<import('@/lib/types').Attendance[]>([]);
+  const [presenceChecks, setPresenceChecks] = React.useState<import('@/lib/types').SchoolPresenceCheck[]>([]);
   const [loading, setLoading] = React.useState(true);
 
   const { toast } = useToast();
@@ -78,6 +80,24 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
   const assignedAlerts = securityAlerts.filter((a) => assignedStudentIds.includes(a.studentId));
 
   const totalStudents = assignedStudents.length;
+  const detectedStudentIds = new Set(
+    presenceChecks
+      .filter(check => check.inside && !check.isMocked)
+      .map(check => check.userId)
+  );
+  const detectedStudents = assignedStudents.filter(student => detectedStudentIds.has(student.id)).length;
+  const assignedTeacherIds = new Set(
+    assignedTimetable.map(entry => entry.teacherId).filter(Boolean) as string[]
+  );
+  const detectedTeacherIds = new Set(
+    presenceChecks
+      .filter(check => check.inside && !check.isMocked && check.role === 'profesor')
+      .map(check => check.userId)
+  );
+  const detectedAssignedTeachers = teachers.filter(
+    teacher => assignedTeacherIds.has(teacher.id) && detectedTeacherIds.has(teacher.id)
+  ).length;
+
 
   const [addStudentOpen, setAddStudentOpen] = React.useState(false);
   const [newStudentName, setNewStudentName] = React.useState('');
@@ -126,6 +146,7 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
       setTimetable(timetableData);
       setSecurityAlerts(alertsData);
       setAttendance(attendanceData);
+      setPresenceChecks(await fetchSchoolPresenceChecks(todayKey));
     } catch (error) {
       console.error('Failed to load data', error);
       toast({ title: 'Error', description: 'Failed to load data from the server.' });
