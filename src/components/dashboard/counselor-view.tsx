@@ -34,10 +34,13 @@ import {
   fetchSecurityAlerts,
   fetchAttendanceForDate,
   fetchSchoolPresenceChecks,
+  fetchSubstitutionRequests,
+  createSubstitutionRequest,
+  handleSubstitutionRequest,
   addStudent,
   addTimetableEntry,
 } from '@/lib/firebase/data';
-import type { Student, Group, Subject, TimetableEntry, SecurityAlert, User } from '@/lib/types';
+import type { Student, Group, Subject, TimetableEntry, SecurityAlert, User, SubstitutionRequest } from '@/lib/types';
 import { Input } from '@/components/ui/input';
 import {
   Dialog,
@@ -66,6 +69,14 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
   const [securityAlerts, setSecurityAlerts] = React.useState<SecurityAlert[]>([]);
   const [attendance, setAttendance] = React.useState<import('@/lib/types').Attendance[]>([]);
   const [presenceChecks, setPresenceChecks] = React.useState<import('@/lib/types').SchoolPresenceCheck[]>([]);
+  const [otherCounselors, setOtherCounselors] = React.useState<User[]>([]);
+  const [substitutionRequests, setSubstitutionRequests] = React.useState<SubstitutionRequest[]>([]);
+  const [substituteId, setSubstituteId] = React.useState('');
+  const [substituteGroupIds, setSubstituteGroupIds] = React.useState<string[]>([]);
+  const [substituteDate, setSubstituteDate] = React.useState('');
+  const [substituteStart, setSubstituteStart] = React.useState('07:00');
+  const [substituteEnd, setSubstituteEnd] = React.useState('09:00');
+  const [substituteMessage, setSubstituteMessage] = React.useState('');
   const [loading, setLoading] = React.useState(true);
 
   const { toast } = useToast();
@@ -127,12 +138,14 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
     try {
       const today = new Date();
       const todayKey = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
-      const [groupsData, subjectsData, teachersData, alertsData, attendanceData] = await Promise.all([
+      const [groupsData, subjectsData, teachersData, alertsData, attendanceData, counselorsData, requestsData] = await Promise.all([
         fetchGroupsByCounselor(currentUser.id),
         fetchSubjects(),
         fetchUsersByRole('profesor'),
         fetchSecurityAlerts(),
         fetchAttendanceForDate(todayKey),
+        fetchUsersByRole('orientador'),
+        fetchSubstitutionRequests(currentUser.id),
       ]);
       const assignedGroupIds = groupsData.map((group) => group.id);
       const [studentResults, timetableData] = await Promise.all([
@@ -143,6 +156,8 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
       setGroups(groupsData);
       setSubjects(subjectsData);
       setTeachers(teachersData);
+      setOtherCounselors(counselorsData.filter(counselor => counselor.id !== currentUser.id));
+      setSubstitutionRequests(requestsData);
       setTimetable(timetableData);
       setSecurityAlerts(alertsData);
       setAttendance(attendanceData);
@@ -559,6 +574,61 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
           </CardContent>
         </Card>
       </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Cobertura temporal de orientación</CardTitle>
+          <CardDescription>Solicita apoyo sin cambiar al orientador titular.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <Select value={substituteId} onValueChange={setSubstituteId}>
+              <SelectTrigger><SelectValue placeholder="Orientador de apoyo" /></SelectTrigger>
+              <SelectContent>{otherCounselors.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+            </Select>
+            <Input type="date" value={substituteDate} onChange={e => setSubstituteDate(e.target.value)} />
+            <Input type="time" value={substituteStart} onChange={e => setSubstituteStart(e.target.value)} />
+            <Input type="time" value={substituteEnd} onChange={e => setSubstituteEnd(e.target.value)} />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {assignedGroups.map(group => {
+              const selected = substituteGroupIds.includes(group.id);
+              return <Button key={group.id} type="button" variant={selected ? 'default' : 'outline'} onClick={() => setSubstituteGroupIds(ids => selected ? ids.filter(id => id !== group.id) : [...ids, group.id])}>{group.name}</Button>;
+            })}
+          </div>
+          <Input value={substituteMessage} onChange={e => setSubstituteMessage(e.target.value)} placeholder="Motivo o indicación (opcional)" />
+          <Button disabled={!substituteId || !substituteDate || !substituteGroupIds.length} onClick={async () => {
+            try {
+              await createSubstitutionRequest({
+                fromCounselorId: currentUser.id,
+                toCounselorId: substituteId,
+                groupIds: substituteGroupIds,
+                date: substituteDate,
+                startTime: substituteStart,
+                endTime: substituteEnd,
+                message: substituteMessage || undefined,
+              });
+              setSubstituteGroupIds([]);
+              setSubstituteMessage('');
+              toast({ title: 'Solicitud enviada', description: 'Queda pendiente de aceptación.' });
+            } catch (error) {
+              console.error(error);
+              toast({ title: 'Error', description: 'No se pudo enviar la solicitud.' });
+            }
+          }}>Solicitar apoyo</Button>
+
+          {substitutionRequests.length > 0 && <div className="space-y-3 border-t pt-4">
+            <p className="font-semibold">Solicitudes recibidas</p>
+            {substitutionRequests.map(request => <div key={request.id} className="flex flex-col gap-3 rounded-lg border p-3 md:flex-row md:items-center md:justify-between">
+              <div><p className="font-medium">Cobertura del {request.date}</p><p className="text-sm text-muted-foreground">{request.startTime}–{request.endTime} · {request.groupIds.length} grupo(s)</p>{request.message && <p className="text-sm mt-1">{request.message}</p>}</div>
+              <div className="flex gap-2">
+                <Button onClick={async () => { await handleSubstitutionRequest(request.id, 'accepted', request); setSubstitutionRequests(items => items.filter(item => item.id !== request.id)); toast({ title: 'Cobertura aceptada', description: 'El titular del grupo no cambió.' }); }}>Aceptar</Button>
+                <Button variant="outline" onClick={async () => { await handleSubstitutionRequest(request.id, 'declined'); setSubstitutionRequests(items => items.filter(item => item.id !== request.id)); }}>Rechazar</Button>
+              </div>
+            </div>)}
+          </div>}
+        </CardContent>
+      </Card>
+
       <div className="grid grid-cols-1 gap-6">
         <NotificationPanel />
       </div>
