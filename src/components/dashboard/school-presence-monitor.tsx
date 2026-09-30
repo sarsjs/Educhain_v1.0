@@ -52,7 +52,7 @@ export function SchoolPresenceMonitor() {
         if (minute === null || now.getHours() !== 7) return;
 
         const date = getTodayKey(now);
-        const checkTime = '07:' + String(minute).padStart(2, '0') as '07:00' | '07:05' | '07:10' | '07:15' | '07:20';
+        const checkTime = ('07:' + String(minute).padStart(2, '0')) as '07:00' | '07:05' | '07:10' | '07:15' | '07:20';
         const key = profile.id + '_' + date + '_' + checkTime;
 
         if (handledSlotsRef.current.has(key) || runningRef.current) return;
