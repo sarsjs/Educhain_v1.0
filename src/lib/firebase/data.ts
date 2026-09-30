@@ -23,13 +23,11 @@ export const createSubstitutionRequest = async (request: Omit<SubstitutionReques
 };
 
 export const fetchSubstitutionRequests = async (toCounselorId: string): Promise<SubstitutionRequest[]> => fetchData(async () => {
-    const q = query(
-        collection(db, "substitution_requests"),
-        where("toCounselorId", "==", toCounselorId),
-        where("status", "==", "pending")
-    );
+    const q = query(collection(db, "substitution_requests"), where("toCounselorId", "==", toCounselorId));
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(item => ({ id: item.id, ...item.data() } as unknown as SubstitutionRequest));
+    return querySnapshot.docs
+        .map(item => ({ id: item.id, ...item.data() } as unknown as SubstitutionRequest))
+        .filter(item => item.status === 'pending');
 }, 'substitution requests');
 
 export const handleSubstitutionRequest = async (
