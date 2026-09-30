@@ -123,9 +123,26 @@ export interface SubstitutionRequest {
     fromCounselorId: string;
     toCounselorId: string;
     groupIds: string[];
+    date: string; // YYYY-MM-DD
+    startTime: string; // HH:MM
+    endTime: string; // HH:MM
     status: 'pending' | 'accepted' | 'declined';
     message?: string;
     timestamp: FieldValue;
+}
+
+export interface CounselorCoverage {
+    id: string;
+    groupId: string;
+    primaryCounselorId: string;
+    substituteCounselorId: string;
+    date: string; // YYYY-MM-DD
+    startTime: string; // HH:MM
+    endTime: string; // HH:MM
+    reason?: string;
+    status: 'active' | 'cancelled' | 'expired';
+    createdBy: string;
+    createdAt: FieldValue;
 }
 
 export interface AppConfig {
