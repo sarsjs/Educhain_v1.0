@@ -198,6 +198,28 @@ service cloud.firestore {
                    get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'orientador');
     }
 
+    // General school presence: each authenticated user may register only
+    // their own GPS observation. Director can review the whole school.
+    match /school_presence_checks/{checkId} {
+      allow create: if request.auth != null &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.keys().hasAll([
+          'userId', 'date', 'checkTime', 'role', 'inside',
+          'distanceMeters', 'confidence', 'isMocked', 'source'
+        ]) &&
+        request.resource.data.checkTime in ['07:00', '07:05', '07:10', '07:15', '07:20'] &&
+        request.resource.data.source == 'client-gps';
+
+      allow read: if request.auth != null &&
+        (
+          request.auth.uid == resource.data.userId ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['director', 'admin']
+        );
+
+      allow update, delete: if request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['director', 'admin'];
+    }
+
     // Default rule - restrictive for all other collections
     match /{document=**} {
       allow read, write: if false; // Default: no access
