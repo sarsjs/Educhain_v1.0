@@ -141,6 +141,9 @@ export interface CounselorCoverage {
     endTime: string; // HH:MM
     startsAt?: FieldValue;
     endsAt?: FieldValue;
+    closedAt?: FieldValue;
+    closedBy?: string;
+    closingSummary?: string;
     reason?: string;
     status: 'active' | 'cancelled' | 'expired';
     createdBy: string;
