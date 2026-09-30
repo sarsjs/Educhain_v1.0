@@ -41,6 +41,7 @@ import { Logo } from '@/components/icons';
 import { Button } from '../ui/button';
 import { useAuth } from '@/context/auth-context';
 import { ModeToggle } from '../mode-toggle';
+import { SchoolPresenceMonitor } from './school-presence-monitor';
 
 const navItems = {
   admin: [
@@ -234,6 +235,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <SidebarProvider defaultOpen>
+      <SchoolPresenceMonitor />
       <div className="flex h-screen w-full">
         <AppSidebar user={profile} />
         <SidebarInset className="flex flex-1 flex-col">
