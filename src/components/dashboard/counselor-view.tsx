@@ -40,6 +40,8 @@ import {
   handleSubstitutionRequest,
   fetchCounselorCoveragesForCounselor,
   fetchCounselorIncidentReports,
+  fetchCounselorClassTakeovers,
+  createCounselorClassTakeover,
   createCounselorIncidentReport,
   closeCounselorCoverage,
   isCounselorCoverageActive,
@@ -47,7 +49,7 @@ import {
   addTimetableEntry,
   generateAttendanceToken,
 } from '@/lib/firebase/data';
-import type { Student, Group, Subject, TimetableEntry, SecurityAlert, User, SubstitutionRequest, CounselorCoverage, CounselorIncidentReport, CounselorIncidentType } from '@/lib/types';
+import type { Student, Group, Subject, TimetableEntry, SecurityAlert, User, SubstitutionRequest, CounselorCoverage, CounselorClassTakeover, CounselorIncidentReport, CounselorIncidentType, CounselorTakeoverReason } from '@/lib/types';
 import { Input } from '@/components/ui/input';
 import {
   Dialog,
@@ -93,6 +95,10 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
   const [substitutionRequests, setSubstitutionRequests] = React.useState<SubstitutionRequest[]>([]);
   const [coverageRecords, setCoverageRecords] = React.useState<CounselorCoverage[]>([]);
   const [incidentReports, setIncidentReports] = React.useState<CounselorIncidentReport[]>([]);
+  const [classTakeovers, setClassTakeovers] = React.useState<CounselorClassTakeover[]>([]);
+  const [takeoverDialogCoverageId, setTakeoverDialogCoverageId] = React.useState('');
+  const [takeoverReason, setTakeoverReason] = React.useState<CounselorTakeoverReason>('teacher_absent');
+  const [takeoverNote, setTakeoverNote] = React.useState('');
   const [reportCoverageId, setReportCoverageId] = React.useState('');
   const [reportType, setReportType] = React.useState<CounselorIncidentType>('late_arrival');
   const [reportStudentId, setReportStudentId] = React.useState('');
@@ -199,10 +205,11 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
       const coverageGroups = (await Promise.all(coverageGroupIds.map((groupId) => fetchGroupById(groupId)))).filter((group): group is Group => group !== null);
       const effectiveGroups = [...new Map([...groupsData, ...coverageGroups].map((group) => [group.id, group])).values()];
       const effectiveGroupIds = effectiveGroups.map((group) => group.id);
-      const [studentResults, timetableData, reportData] = await Promise.all([
+      const [studentResults, timetableData, reportData, takeoverData] = await Promise.all([
         Promise.all(relevantGroupIds.map((groupId) => fetchStudentsByGroup(groupId))),
         fetchTimetableByGroups(effectiveGroupIds),
         fetchCounselorIncidentReports(coveragesData.map((coverage) => coverage.id)),
+        fetchCounselorClassTakeovers(coveragesData.map((coverage) => coverage.id)),
       ]);
       setStudents(studentResults.flat());
       setGroups(effectiveGroups);
@@ -212,6 +219,7 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
       setSubstitutionRequests(requestsData);
       setCoverageRecords(coveragesData);
       setIncidentReports(reportData);
+      setClassTakeovers(takeoverData);
       setTimetable(timetableData);
       setSecurityAlerts(alertsData);
       setAttendance(attendanceData);
@@ -696,12 +704,26 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
               const group = groups.find((item) => item.id === coverage.groupId);
               const currentEntry = timetable.find((entry) => entry.groupId === coverage.groupId && isCurrentCounselorTimetableEntry(entry));
               const subject = currentEntry ? subjects.find((item) => item.id === currentEntry.subjectId) : undefined;
+              const scheduledTeacherId = currentEntry?.teacherId || subject?.teacherId;
+              const scheduledTeacher = scheduledTeacherId ? teachers.find((teacher) => teacher.id === scheduledTeacherId) : undefined;
+              const takeover = currentEntry
+                ? classTakeovers.find((item) =>
+                    item.coverageId === coverage.id &&
+                    item.timetableId === currentEntry.id
+                  )
+                : undefined;
               const tokenActive = activeCoverageToken?.coverageId === coverage.id;
               return <div key={coverage.id} className="rounded-xl border p-4 space-y-3">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                   <div>
                     <p className="font-bold">{group?.name || coverage.groupId}</p>
                     <p className="text-sm text-muted-foreground">{subject?.name || 'Sin clase actual'}{currentEntry ? ' · ' + currentEntry.time : ''}</p>
+                    {currentEntry && <p className="text-xs mt-1">
+                      Profesor programado: <span className="font-medium">{scheduledTeacher?.name || 'No identificado'}</span>
+                    </p>}
+                    {takeover && <p className="text-xs font-medium text-primary mt-1">
+                      Grupo tomado por {currentUser.name} · {takeover.reason === 'teacher_absent' ? 'profesor ausente' : takeover.reason === 'teacher_unavailable' ? 'profesor no disponible' : 'otra causa'}
+                    </p>}
                   </div>
                   {tokenActive ? (
                     <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3">
@@ -710,6 +732,7 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
                       <p className="text-xs text-muted-foreground">Expira en {Math.floor(coverageTokenCountdown / 60)}:{String(coverageTokenCountdown % 60).padStart(2, '0')}</p>
                     </div>
                   ) : (
+                    takeover ? (
                     <Button disabled={!currentEntry || !subject} onClick={async () => {
                       if (!currentEntry) return;
                       try {
