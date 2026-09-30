@@ -3,8 +3,8 @@
 import * as React from 'react';
 import { School, Users, User as UserIcon, FolderKanban, UserCheck, GraduationCap, AlertTriangle, ShieldCheck, MapPin, Clock } from 'lucide-react';
 import { StatCard } from './stat-card';
-import { fetchUsers, fetchGroups, fetchStudents, fetchSubjects } from '@/lib/firebase/data';
-import type { Group, User, Student, Subject } from '@/lib/types';
+import { fetchUsers, fetchGroups, fetchStudents, fetchSubjects, fetchSchoolPresenceChecks } from '@/lib/firebase/data';
+import type { Group, User, Student, Subject, SchoolPresenceCheck } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { NotificationPanel } from './notification-panel';
 import { WorkAttendanceTable } from './work-attendance-table';
@@ -19,6 +19,7 @@ export function DirectorView() {
   const [groupList, setGroupList] = React.useState<Group[]>([]);
   const [cycleList, setCycleList] = React.useState<string[]>([]);
   const [studentList, setStudentList] = React.useState<Student[]>([]);
+  const [presenceChecks, setPresenceChecks] = React.useState<SchoolPresenceCheck[]>([]);
   const { toast } = useToast();
 
   const [integrityAlerts, setIntegrityAlerts] = React.useState<string[]>([]);
@@ -67,6 +68,10 @@ export function DirectorView() {
       setGroupList(groupsData);
       setStudentList(studentsData);
 
+      const today = new Date();
+      const dateKey = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+      setPresenceChecks(await fetchSchoolPresenceChecks(dateKey));
+
       // Analizar integridad para notificaciones sintéticas
       analyzeIntegrity(users, groupsData, studentsData, subjectsData);
     } catch (error) {
@@ -95,8 +100,12 @@ export function DirectorView() {
   const directorCount = staffList.filter((u) => u.role === 'director').length;
   const totalStudents = studentList.length;
 
-  // Mock de alumnos en plantel (para efectos visuales de utilidad)
-  const studentsPresent = Math.floor(totalStudents * 0.85);
+  // Presencia general real: una persona queda detectada si tuvo al menos
+  // una lectura válida dentro del plantel durante la ventana 07:00-07:20.
+  const detectedUserIds = new Set(
+    presenceChecks.filter(check => check.inside && !check.isMocked).map(check => check.userId)
+  );
+  const studentsPresent = studentList.filter(student => detectedUserIds.has(student.id)).length;
 
   // Identificar grupos sin cobertura (Orientador fuera o desconocido sin suplente)
   const unattendedGroups = groupList.filter(group => {
@@ -189,7 +198,7 @@ export function DirectorView() {
           title="Presencia"
           value={`${studentsPresent}`}
           icon={UserCheck}
-          description={`de ${totalStudents} alumnos`}
+          description={`detectados 07:00-07:20 de ${totalStudents}`}
         />
         <StatCard
           title="Maestros"
