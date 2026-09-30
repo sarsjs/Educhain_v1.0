@@ -244,6 +244,49 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['director', 'admin'];
     }
 
+    // Temporary counselor coverage. It grants scoped operational access
+    // without changing groups.counselorId.
+    match /counselor_coverages/{coverageId} {
+      allow read: if request.auth != null && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['director', 'admin'] ||
+        resource.data.primaryCounselorId == request.auth.uid ||
+        resource.data.substituteCounselorId == request.auth.uid
+      );
+
+      allow create: if request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'orientador' &&
+        request.resource.data.primaryCounselorId is string &&
+        request.resource.data.substituteCounselorId == request.auth.uid &&
+        request.resource.data.groupId is string &&
+        (
+          get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.counselorId == request.auth.uid ||
+          get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.tempCounselorId == request.auth.uid
+        );
+
+      allow update, delete: if request.auth != null && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['director', 'admin'] ||
+        resource.data.substituteCounselorId == request.auth.uid
+      );
+    }
+
+    // Substitution requests remain separate from the actual temporary coverage.
+    match /substitution_requests/{requestId} {
+      allow read: if request.auth != null && (
+        resource.data.fromCounselorId == request.auth.uid ||
+        resource.data.toCounselorId == request.auth.uid ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['director', 'admin']
+      );
+
+      allow create: if request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'orientador' &&
+        request.resource.data.fromCounselorId == request.auth.uid;
+
+      allow update: if request.auth != null && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['director', 'admin'] ||
+        resource.data.toCounselorId == request.auth.uid
+      );
+    }
+
     // Default rule - restrictive for all other collections
     match /{document=**} {
       allow read, write: if false; // Default: no access
