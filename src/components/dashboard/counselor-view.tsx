@@ -146,7 +146,7 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
       setTimetable(timetableData);
       setSecurityAlerts(alertsData);
       setAttendance(attendanceData);
-      setPresenceChecks(await fetchSchoolPresenceChecks(todayKey));
+      setPresenceChecks(await fetchSchoolPresenceChecks(todayKey, undefined, assignedGroupIds));
     } catch (error) {
       console.error('Failed to load data', error);
       toast({ title: 'Error', description: 'Failed to load data from the server.' });
