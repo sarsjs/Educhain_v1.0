@@ -118,6 +118,27 @@ export const isCounselorCoverageActive = (coverage: CounselorCoverage, now = new
     return now >= start && now <= end;
 };
 
+export const closeCounselorCoverage = async (
+    coverageId: string,
+    counselorId: string,
+    closingSummary: string
+) => {
+    const coverageRef = doc(db, "counselor_coverages", coverageId);
+    const coverageSnap = await getDoc(coverageRef);
+    if (!coverageSnap.exists()) throw new Error("La cobertura ya no existe.");
+    const coverage = { id: coverageSnap.id, ...coverageSnap.data() } as CounselorCoverage;
+    if (coverage.substituteCounselorId !== counselorId && coverage.primaryCounselorId !== counselorId) {
+        throw new Error("No tienes autorización para cerrar esta cobertura.");
+    }
+    if (coverage.status !== 'active') throw new Error("La cobertura ya está cerrada.");
+    await updateDoc(coverageRef, {
+        status: 'expired',
+        closedAt: serverTimestamp(),
+        closedBy: counselorId,
+        closingSummary: closingSummary.trim(),
+    });
+};
+
 export const createCounselorIncidentReport = async (
     report: Omit<CounselorIncidentReport, 'id' | 'createdAt'>
 ) => {
