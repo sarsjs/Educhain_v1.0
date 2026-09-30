@@ -611,15 +611,17 @@ export const sendMessage = async (message: Omit<Message, "id" | "timestamp">) =>
  * El ID es determinista por usuario/día/intervalo para evitar duplicados.
  */
 export const recordSchoolPresenceCheck = async (check: Omit<SchoolPresenceCheck, "id" | "createdAt">) => {
-    const id = check.userId + "_" + check.date + "_" + check.checkTime.replace(":", "");
+    const scopeId = check.groupId || 'school';
+    const id = check.userId + "_" + check.date + "_" + check.checkTime.replace(":", "") + "_" + scopeId;
     const ref = doc(db, "school_presence_checks", id);
     await setDoc(ref, { ...check, createdAt: serverTimestamp() }, { merge: true });
     return id;
 };
 
-export const fetchSchoolPresenceChecks = async (date: string, userId?: string): Promise<SchoolPresenceCheck[]> => fetchData(async () => {
+export const fetchSchoolPresenceChecks = async (date: string, userId?: string, groupIds?: string[]): Promise<SchoolPresenceCheck[]> => fetchData(async () => {
     let q = query(collection(db, "school_presence_checks"), where("date", "==", date));
     if (userId) q = query(q, where("userId", "==", userId));
+    else if (groupIds && groupIds.length > 0) q = query(q, where("groupId", "in", groupIds.slice(0, 30)));
     const snapshot = await getDocs(q);
     return snapshot.docs.map(item => ({ id: item.id, ...item.data() } as SchoolPresenceCheck));
 }, "school presence checks");
