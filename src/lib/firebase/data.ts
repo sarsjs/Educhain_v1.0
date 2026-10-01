@@ -878,7 +878,7 @@ export const generateAttendanceToken = async (subjectId: string, groupId: string
         timetableId,
         code,
         date,
-        ...(options?.coverageId ? { coverageId: options.coverageId } : {}),
+        ...(options?.coverageId ? { coverageId: options.coverageId, takeoverId: options.coverageId + "_" + timetableId } : {}),
         ...(options?.createdBy ? { createdBy: options.createdBy } : {}),
         ...(options?.createdByRole ? { createdByRole: options.createdByRole } : {}),
         expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes validity
@@ -924,6 +924,7 @@ export const registerAttendanceFromToken = async ({
     tokenId,
     subjectId,
     date,
+    timetableId,
 }: {
     studentId: string;
     groupId: string;
