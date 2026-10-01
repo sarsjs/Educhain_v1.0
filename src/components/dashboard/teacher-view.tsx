@@ -134,7 +134,28 @@ export function TeacherView() {
 
   const handleStartAttendance = async (subjectId: string, groupId: string, timetableId: string) => {
     try {
-      const token = await generateAttendanceToken(subjectId, groupId, timetableId);
+      if (!navigator.geolocation) {
+        throw new Error("Geolocalización no disponible");
+      }
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 0,
+        });
+      });
+      const { verifyUserLocation } = await import("@/lib/gps-utils");
+      const gpsResult = await verifyUserLocation(position);
+      if (!gpsResult.isInside || gpsResult.isMocked) {
+        throw new Error("El profesor debe estar dentro del plantel para iniciar el pase de lista.");
+      }
+      const token = await generateAttendanceToken(subjectId, groupId, timetableId, {
+        teacherLocation: {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+        },
+      });
       const expiresAt = Date.now() + 5 * 60 * 1000;
 
       setActiveToken({
