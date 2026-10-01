@@ -68,6 +68,7 @@ import { IdCard } from './id-card';
 import { MessagePanel } from './message-panel';
 import { RealTimeAttendance } from './real-time-attendance';
 import { NotificationPanel } from './notification-panel';
+import { verifyUserLocation } from '@/lib/gps-utils';
 
 const isCurrentCounselorTimetableEntry = (entry: TimetableEntry) => {
   const dayIndex = new Date().getDay();
@@ -735,7 +736,28 @@ export function CounselorView({ currentUser }: { currentUser: User }) {
                     <Button disabled={!currentEntry || !subject} onClick={async () => {
                       if (!currentEntry) return;
                       try {
-                        const token = await generateAttendanceToken(currentEntry.subjectId, coverage.groupId, currentEntry.id, { coverageId: coverage.id, createdBy: currentUser.id, createdByRole: 'orientador' });
+                        if (!navigator.geolocation) throw new Error('Geolocalización no disponible');
+                        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+                          navigator.geolocation.getCurrentPosition(resolve, reject, {
+                            enableHighAccuracy: true,
+                            timeout: 15000,
+                            maximumAge: 0,
+                          });
+                        });
+                        const gpsResult = await verifyUserLocation(position);
+                        if (!gpsResult.isInside || gpsResult.isMocked) {
+                          throw new Error('El orientador debe estar dentro del plantel para iniciar el pase de lista.');
+                        }
+                        const token = await generateAttendanceToken(currentEntry.subjectId, coverage.groupId, currentEntry.id, {
+                          coverageId: coverage.id,
+                          createdBy: currentUser.id,
+                          createdByRole: 'orientador',
+                          teacherLocation: {
+                            latitude: position.coords.latitude,
+                            longitude: position.coords.longitude,
+                            accuracy: position.coords.accuracy,
+                          },
+                        });
                         setActiveCoverageToken({ code: token.code, expiresAt: Date.now() + 5 * 60 * 1000, groupId: coverage.groupId, subjectId: currentEntry.subjectId, timetableId: currentEntry.id, coverageId: coverage.id });
                         toast({ title: 'Pase de lista iniciado', description: 'Código generado para ' + (group?.name || 'el grupo cubierto') + '.' });
                       } catch (error) {
