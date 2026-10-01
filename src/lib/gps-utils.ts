@@ -33,6 +33,31 @@ export interface LocationScanResult {
     error?: string;
 }
 
+/** Returns the distance in meters between two GPS coordinates. */
+export function calculateCoordinateDistance(
+    first: { latitude: number; longitude: number },
+    second: { latitude: number; longitude: number }
+): number {
+    return calculateDistance(first.latitude, first.longitude, second.latitude, second.longitude);
+}
+
+/**
+ * Validates that a student's GPS position is reasonably close to the teacher's
+ * position. GPS indoors is noisy, so this is intentionally a soft proximity
+ * check rather than an exact coordinate match.
+ */
+export function verifyProximityToTeacher(
+    studentPosition: GeolocationPosition,
+    teacherLocation: { latitude: number; longitude: number },
+    radius = 75
+): { isNear: boolean; distance: number } {
+    const distance = calculateCoordinateDistance(
+        { latitude: studentPosition.coords.latitude, longitude: studentPosition.coords.longitude },
+        teacherLocation
+    );
+    return { isNear: distance <= radius, distance };
+}
+
 /**
  * Verifies if the user is within the school perimeter and checks for GPS spoofing.
  */
