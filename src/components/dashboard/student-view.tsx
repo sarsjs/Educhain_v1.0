@@ -22,7 +22,7 @@ import {
   verifyAttendanceToken,
   registerAttendanceFromToken,
 } from "@/lib/firebase/data";
-import { verifyUserLocation } from "@/lib/gps-utils";
+import { verifyUserLocation, verifyProximityToTeacher } from "@/lib/gps-utils";
 import { KeyRound, ShieldCheck, MapPin, CheckCircle, Clock3 } from "lucide-react";
 import type { Attendance, Subject, TimetableEntry, User } from "@/lib/types";
 
@@ -171,6 +171,26 @@ export function StudentView() {
         return;
       }
 
+      if (!token.teacherLocation) {
+        toast({
+          title: "Ubicación del profesor no disponible",
+          description: "El pase de lista debe iniciarse nuevamente por el profesor.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const proximity = verifyProximityToTeacher(position, token.teacherLocation, 75);
+
+      if (!proximity.isNear) {
+        toast({
+          title: "Demasiado lejos del profesor",
+          description: "Acércate al salón/profesor para registrar tu asistencia.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const result = await registerAttendanceFromToken({
         studentId: student.id,
         groupId: student.groupId,
@@ -178,6 +198,12 @@ export function StudentView() {
         subjectId: token.subjectId,
         date: today,
         timetableId: token.timetableId,
+        studentLocation: {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+        },
+        distanceToTeacher: proximity.distance,
       });
 
       if (result.alreadyRegistered) {
