@@ -127,10 +127,13 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'director' ||
         (
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'profesor' &&
-          request.resource.data.keys().hasAll(['subjectId', 'groupId', 'timetableId', 'code', 'date', 'expiresAt']) &&
+          request.resource.data.keys().hasAll(['subjectId', 'groupId', 'timetableId', 'code', 'date', 'expiresAt', 'teacherLocation']) &&
           request.resource.data.code is string &&
           request.resource.data.code.size() == 4 &&
           request.resource.data.date is string &&
+          request.resource.data.teacherLocation is map &&
+          request.resource.data.teacherLocation.latitude is number &&
+          request.resource.data.teacherLocation.longitude is number &&
           (
             get(/databases/$(database)/documents/timetables/$(request.resource.data.timetableId)).data.teacherId == request.auth.uid ||
             (
@@ -153,10 +156,13 @@ service cloud.firestore {
           get(/databases/$(database)/documents/counselor_coverages/$(request.resource.data.coverageId)).data.status == 'active' &&
           request.time >= get(/databases/$(database)/documents/counselor_coverages/$(request.resource.data.coverageId)).data.startsAt &&
           request.time <= get(/databases/$(database)/documents/counselor_coverages/$(request.resource.data.coverageId)).data.endsAt &&
-          request.resource.data.keys().hasAll(['subjectId', 'groupId', 'timetableId', 'code', 'date', 'expiresAt', 'coverageId', 'takeoverId', 'createdBy', 'createdByRole']) &&
+          request.resource.data.keys().hasAll(['subjectId', 'groupId', 'timetableId', 'code', 'date', 'expiresAt', 'coverageId', 'takeoverId', 'createdBy', 'createdByRole', 'teacherLocation']) &&
           request.resource.data.code is string &&
           request.resource.data.code.size() == 4 &&
           request.resource.data.date is string &&
+          request.resource.data.teacherLocation is map &&
+          request.resource.data.teacherLocation.latitude is number &&
+          request.resource.data.teacherLocation.longitude is number &&
           get(/databases/$(database)/documents/timetables/$(request.resource.data.timetableId)).data.groupId == request.resource.data.groupId &&
           get(/databases/$(database)/documents/timetables/$(request.resource.data.timetableId)).data.subjectId == request.resource.data.subjectId &&
           exists(/databases/$(database)/documents/counselor_class_takeovers/$(request.resource.data.takeoverId)) &&
@@ -184,7 +190,12 @@ service cloud.firestore {
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['estudiante', 'alumno'] &&
           request.resource.data.studentId == request.auth.uid &&
           request.resource.data.present == true &&
-          request.resource.data.keys().hasAll(['studentId', 'groupId', 'subjectId', 'timetableId', 'date', 'present', 'tokenId']) &&
+          request.resource.data.keys().hasAll(['studentId', 'groupId', 'subjectId', 'timetableId', 'date', 'present', 'tokenId', 'studentLocation', 'distanceToTeacher']) &&
+          request.resource.data.studentLocation is map &&
+          request.resource.data.studentLocation.latitude is number &&
+          request.resource.data.studentLocation.longitude is number &&
+          request.resource.data.distanceToTeacher is number &&
+          request.resource.data.distanceToTeacher <= 75 &&
           request.resource.data.groupId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.groupId &&
           get(/databases/$(database)/documents/attendance_tokens/$(request.resource.data.tokenId)).data.groupId == request.resource.data.groupId &&
           get(/databases/$(database)/documents/attendance_tokens/$(request.resource.data.tokenId)).data.subjectId == request.resource.data.subjectId &&
