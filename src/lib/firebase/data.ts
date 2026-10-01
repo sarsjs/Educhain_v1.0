@@ -869,7 +869,7 @@ export const fetchWorkLogs = async (date?: string, userId?: string): Promise<Wor
 /**
  * Generates a temporary 4-digit code for a class session.
  */
-export const generateAttendanceToken = async (subjectId: string, groupId: string, timetableId: string, options?: { coverageId?: string; createdBy?: string; createdByRole?: User['role'] }) => {
+export const generateAttendanceToken = async (subjectId: string, groupId: string, timetableId: string, options?: { coverageId?: string; createdBy?: string; createdByRole?: User['role']; teacherLocation?: { latitude: number; longitude: number; accuracy?: number } }) => {
     const code = Math.floor(1000 + Math.random() * 9000).toString();
     const date = getTodayDateKey();
     const tokenData = {
@@ -881,6 +881,7 @@ export const generateAttendanceToken = async (subjectId: string, groupId: string
         ...(options?.coverageId ? { coverageId: options.coverageId, takeoverId: options.coverageId + "_" + timetableId } : {}),
         ...(options?.createdBy ? { createdBy: options.createdBy } : {}),
         ...(options?.createdByRole ? { createdByRole: options.createdByRole } : {}),
+        ...(options?.teacherLocation ? { teacherLocation: options.teacherLocation } : {}),
         expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes validity
         createdAt: serverTimestamp()
     };
@@ -915,6 +916,7 @@ export const verifyAttendanceToken = async (groupId: string, code: string) => {
         date: tokenDoc.date as string,
         timetableId: tokenDoc.timetableId as string,
         expiresAt: tokenDoc.expiresAt,
+        teacherLocation: tokenDoc.teacherLocation as { latitude: number; longitude: number; accuracy?: number } | undefined,
     };
 };
 
