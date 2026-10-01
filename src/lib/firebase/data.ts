@@ -951,6 +951,8 @@ export const registerAttendanceFromToken = async ({
         date,
         present: true,
         tokenId,
+        studentLocation,
+        distanceToTeacher,
         createdAt: serverTimestamp(),
     });
 
