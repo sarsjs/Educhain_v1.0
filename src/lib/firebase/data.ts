@@ -927,6 +927,8 @@ export const registerAttendanceFromToken = async ({
     subjectId,
     date,
     timetableId,
+    studentLocation,
+    distanceToTeacher,
 }: {
     studentId: string;
     groupId: string;
@@ -934,6 +936,8 @@ export const registerAttendanceFromToken = async ({
     subjectId: string;
     date: string;
     timetableId: string;
+    studentLocation: { latitude: number; longitude: number; accuracy?: number };
+    distanceToTeacher: number;
 }) => {
     const attendanceId = studentId + "_" + date + "_" + timetableId;
     const attendanceRef = doc(db, "attendance", attendanceId);
