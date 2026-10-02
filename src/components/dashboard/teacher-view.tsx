@@ -181,12 +181,13 @@ export function TeacherView() {
     }
   };
 
-  const attendanceFor = (groupId: string, studentId: string, subjectId: string) =>
+  const attendanceFor = (groupId: string, studentId: string, subjectId: string, timetableId?: string) =>
     attendance.some(
       (record) =>
         record.groupId === groupId &&
         record.studentId === studentId &&
         record.subjectId === subjectId &&
+        (!timetableId || record.timetableId === timetableId) &&
         record.present === true
     );
 
@@ -299,7 +300,8 @@ export function TeacherView() {
                       );
                       const isTokenActive =
                         activeToken?.subjectId === subject.id &&
-                        activeToken.groupId === groupId;
+                        activeToken.groupId === groupId &&
+                        activeToken.timetableId === currentEntry?.id;
 
                       return (
                         <div key={groupId} className="rounded-xl border p-4 space-y-4">
@@ -355,7 +357,8 @@ export function TeacherView() {
                                 const present = attendanceFor(
                                   groupId,
                                   student.id,
-                                  subject.id
+                                  subject.id,
+                                  currentEntry?.id
                                 );
 
                                 return (
