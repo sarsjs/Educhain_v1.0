@@ -196,6 +196,13 @@ service cloud.firestore {
           request.resource.data.studentLocation.longitude is number &&
           request.resource.data.distanceToTeacher is number &&
           request.resource.data.distanceToTeacher <= 75 &&
+          get(/databases/$(database)/documents/attendance_tokens/$(request.resource.data.tokenId)).data.teacherLocation is map &&
+          get(/databases/$(database)/documents/attendance_tokens/$(request.resource.data.tokenId)).data.teacherLocation.latitude is number &&
+          get(/databases/$(database)/documents/attendance_tokens/$(request.resource.data.tokenId)).data.teacherLocation.longitude is number &&
+          request.resource.data.studentLocation.latitude >= get(/databases/$(database)/documents/attendance_tokens/$(request.resource.data.tokenId)).data.teacherLocation.latitude - 0.00068 &&
+          request.resource.data.studentLocation.latitude <= get(/databases/$(database)/documents/attendance_tokens/$(request.resource.data.tokenId)).data.teacherLocation.latitude + 0.00068 &&
+          request.resource.data.studentLocation.longitude >= get(/databases/$(database)/documents/attendance_tokens/$(request.resource.data.tokenId)).data.teacherLocation.longitude - 0.00072 &&
+          request.resource.data.studentLocation.longitude <= get(/databases/$(database)/documents/attendance_tokens/$(request.resource.data.tokenId)).data.teacherLocation.longitude + 0.00072 &&
           request.resource.data.groupId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.groupId &&
           get(/databases/$(database)/documents/attendance_tokens/$(request.resource.data.tokenId)).data.groupId == request.resource.data.groupId &&
           get(/databases/$(database)/documents/attendance_tokens/$(request.resource.data.tokenId)).data.subjectId == request.resource.data.subjectId &&
