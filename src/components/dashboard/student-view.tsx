@@ -240,11 +240,11 @@ export function StudentView() {
       .filter((entry) => entry.day === day)
       .sort((a, b) => a.time.localeCompare(b.time));
 
-  const isPresentToday = (subjectId: string) =>
+  const isPresentToday = (timetableId: string) =>
     attendance.some(
       (record) =>
         record.date === today &&
-        record.subjectId === subjectId &&
+        record.timetableId === timetableId &&
         record.present === true
     );
 
@@ -366,7 +366,7 @@ export function StudentView() {
                 ) : (
                   <div className="grid gap-2">
                     {entries.map((entry) => {
-                      const present = isPresentToday(entry.subjectId);
+                      const present = isPresentToday(entry.id);
 
                       return (
                         <div
