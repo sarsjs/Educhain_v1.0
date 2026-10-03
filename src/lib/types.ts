@@ -7,6 +7,7 @@ export interface User {
     name: string;
     email: string;
     role: UserRole;
+    status?: 'active' | 'inactive';
     groupId?: string;
     groups?: string[];
     matricula?: string;
@@ -24,6 +25,7 @@ export interface Group {
     semester: number;
     cycleId: string;
     counselorId: string;
+    active?: boolean;
     tempCounselorId?: string; // ID del orientador suplente
     absenceStatus?: {
         isActive: boolean;
