@@ -71,8 +71,8 @@ export function AcademicPlanning({ mode }: { mode: Mode }) {
         fetchAcademicAssignments(groupIds),
         fetchTimetableByGroups(groupIds),
       ]);
-      setGroups(visibleGroups);
-      setTeachers(users.filter(u => u.role === 'profesor'));
+      setGroups(visibleGroups.filter(g => g.active !== false));
+      setTeachers(users.filter(u => u.role === 'profesor' && u.status !== 'inactive'));
       setSubjects(subs.filter(s => s.active !== false));
       setAssignments(asgs.filter(a => a.active !== false));
       setEntries(tt);
@@ -93,6 +93,7 @@ export function AcademicPlanning({ mode }: { mode: Mode }) {
       semester: Number(semester),
       cycleId: 'actual',
       counselorId: mode === 'orientador' ? profile.id : '',
+      active: true,
     });
     setGroupName('');
     toast({title:'Grupo creado'});
@@ -174,6 +175,53 @@ export function AcademicPlanning({ mode }: { mode: Mode }) {
     await load();
   };
 
+
+  const editGroup = async (group: Group) => {
+    const name = window.prompt('Nombre del grupo:', group.name);
+    if (!name?.trim()) return;
+    const semesterValue = window.prompt('Semestre (1-6):', String(group.semester));
+    const nextSemester = Number(semesterValue);
+    if (!Number.isInteger(nextSemester) || nextSemester < 1 || nextSemester > 6) return;
+    await updateGroup(group.id, { name: name.trim(), semester: nextSemester });
+    await load();
+  };
+
+  const editTeacher = async (teacher: User) => {
+    const name = window.prompt('Nombre del profesor:', teacher.name);
+    if (!name?.trim()) return;
+    await updateUser(teacher.id, { name: name.trim() });
+    await load();
+  };
+
+  const deactivateTeacher = async (teacher: User) => {
+    const used = assignments.some(a => a.teacherId === teacher.id && a.active !== false);
+    if (used) {
+      toast({ title:'No se puede retirar todavía', description:'Primero retira sus asignaciones académicas. El historial de horarios y asistencia se conserva.', variant:'destructive' });
+      return;
+    }
+    if (!window.confirm(`¿Dar de baja a ${teacher.name}? Su historial no se eliminará.`)) return;
+    await updateUser(teacher.id, { status:'inactive' });
+    await load();
+  };
+
+  const editSubject = async (subject: Subject) => {
+    const name = window.prompt('Nombre de la materia:', subject.name);
+    if (!name?.trim()) return;
+    await updateSubject(subject.id, { name: name.trim() });
+    await load();
+  };
+
+  const deactivateSubject = async (subject: Subject) => {
+    const used = assignments.some(a => a.subjectId === subject.id && a.active !== false);
+    if (used) {
+      toast({ title:'No se puede retirar todavía', description:'Primero retira sus asignaciones. El historial de horarios y asistencia se conserva.', variant:'destructive' });
+      return;
+    }
+    if (!window.confirm(`¿Retirar la materia ${subject.name}? Su historial no se eliminará.`)) return;
+    await updateSubject(subject.id, { active:false });
+    await load();
+  };
+
   const groupLabel = (id:string) => {
     const g=groups.find(x=>x.id===id);
     return g ? `${g.semester}° ${g.name}` : id;
@@ -198,7 +246,7 @@ export function AcademicPlanning({ mode }: { mode: Mode }) {
           <CardContent className="space-y-3">
             <div className="flex gap-2"><Input placeholder="Ej. Grupo A" value={groupName} onChange={e=>setGroupName(e.target.value)}/><Input className="w-24" type="number" min="1" max="6" value={semester} onChange={e=>setSemester(e.target.value)}/></div>
             <Button onClick={createGroup} className="w-full"><Plus className="h-4 w-4 mr-2"/>Agregar grupo</Button>
-            <div className="space-y-1 max-h-48 overflow-auto">{groups.map(g=><div key={g.id} className="flex justify-between text-sm border rounded p-2"><span>{g.semester}° {g.name}</span><Badge variant="outline">{mode==='director'?'Unificado':'A mi cargo'}</Badge></div>)}</div>
+            <div className="space-y-1 max-h-48 overflow-auto">{groups.map(g=><div key={g.id} className="flex justify-between items-center gap-2 text-sm border rounded p-2"><span>{g.semester}° {g.name}</span><div className="flex items-center gap-2"><Badge variant="outline">{mode==='director'?'Unificado':'A mi cargo'}</Badge><Button variant="ghost" size="sm" onClick={()=>editGroup(g)}>Editar</Button></div></div>)}</div>
           </CardContent>
         </Card>
 
@@ -208,7 +256,7 @@ export function AcademicPlanning({ mode }: { mode: Mode }) {
             <Input placeholder="Nombre completo" value={teacherName} onChange={e=>setTeacherName(e.target.value)}/>
             <Input type="email" placeholder="Correo de acceso" value={teacherEmail} onChange={e=>setTeacherEmail(e.target.value)}/>
             <Button onClick={createTeacher} className="w-full"><Plus className="h-4 w-4 mr-2"/>Agregar profesor</Button>
-            <div className="space-y-1 max-h-48 overflow-auto">{teachers.map(u=><div key={u.id} className="text-sm border rounded p-2">{u.name}<div className="text-xs text-muted-foreground">{u.email}</div></div>)}</div>
+            <div className="space-y-1 max-h-48 overflow-auto">{teachers.map(u=><div key={u.id} className="flex justify-between items-center gap-2 text-sm border rounded p-2"><div>{u.name}<div className="text-xs text-muted-foreground">{u.email}</div></div><div className="flex gap-1"><Button variant="ghost" size="sm" onClick={()=>editTeacher(u)}>Editar</Button><Button variant="ghost" size="sm" onClick={()=>deactivateTeacher(u)}>Retirar</Button></div></div>)}</div>
           </CardContent>
         </Card>
 
@@ -217,7 +265,7 @@ export function AcademicPlanning({ mode }: { mode: Mode }) {
           <CardContent className="space-y-3">
             <Input placeholder="Nombre de la materia" value={subjectName} onChange={e=>setSubjectName(e.target.value)}/>
             <Button onClick={createSubject} className="w-full"><Plus className="h-4 w-4 mr-2"/>Agregar materia</Button>
-            <div className="space-y-1 max-h-48 overflow-auto">{subjects.map(s=><div key={s.id} className="text-sm border rounded p-2">{s.name}</div>)}</div>
+            <div className="space-y-1 max-h-48 overflow-auto">{subjects.map(s=><div key={s.id} className="flex justify-between items-center gap-2 text-sm border rounded p-2"><span>{s.name}</span><div className="flex gap-1"><Button variant="ghost" size="sm" onClick={()=>editSubject(s)}>Editar</Button><Button variant="ghost" size="sm" onClick={()=>deactivateSubject(s)}>Retirar</Button></div></div>)}</div>
           </CardContent>
         </Card>
       </div>
