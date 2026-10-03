@@ -88,7 +88,7 @@ export function ScheduleGrid({ schedule, subjects, groups = [], title = 'Horario
         {schedule.length === 0 || timeSlots.length === 0 ? (
           <p className="text-sm text-muted-foreground">{emptyLabel}</p>
         ) : (
-          <Table>
+          <div className="w-full overflow-x-auto">\n            <Table className="min-w-[640px]">
             <TableHeader>
               <TableRow>
                 <TableHead className="font-bold">Hora</TableHead>

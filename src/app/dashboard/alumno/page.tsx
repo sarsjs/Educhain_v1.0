@@ -37,7 +37,6 @@ import {
   Trophy
 } from 'lucide-react';
 import { StatCard } from '@/components/dashboard/stat-card';
-import { AchievementShowcase } from '@/components/dashboard/achievement-showcase';
 import { toPng } from 'html-to-image';
 import { useToast } from '@/hooks/use-toast';
 
@@ -190,30 +189,20 @@ export default function AlumnoPage() {
 
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+    <div className="w-full min-w-0 space-y-4 sm:space-y-6">
+      <div className="flex min-w-0 flex-col gap-3 sm:gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-3xl font-black tracking-tighter text-foreground">Hola, {student?.name?.split(' ')[0] || 'Estudiante'} </h1>
+          <h1 className="text-2xl font-black tracking-tighter text-foreground sm:text-3xl">Hola, {student?.name?.split(' ')[0] || 'Estudiante'} </h1>
           <p className="text-muted-foreground font-medium">{config?.institutionName || 'Panel Académico Institucional EPO 264'}</p>
         </div>
-        <div className="flex items-center gap-2 px-4 py-2 bg-primary/10 rounded-full border border-primary/20">
+        <div className="flex w-fit max-w-full items-center gap-2 px-3 py-2 bg-primary/10 rounded-full border border-primary/20 sm:px-4">
           <GraduationCap className="h-4 w-4 text-primary" />
           <span className="text-xs font-black uppercase text-primary">{group?.name || 'Sin Grupo'}</span>
         </div>
       </div>
 
-      {/* Sistema de Gamificación - Vistazo Premium */}
-      {config?.features.badges && (
-        <AchievementShowcase
-          xp={student?.xp || 750}
-          level={student?.level || 3}
-          unlockedBadges={student?.badges || ['reloj_precision', 'buscador_oro']}
-          userName={student?.name?.split(' ')[0]}
-        />
-      )}
-
       {/* Stats Summary */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+      <div className="grid min-w-0 gap-3 grid-cols-2 lg:grid-cols-4 sm:gap-4">
         <StatCard
           title="Promedio General"
           value={stats?.average || '0.0'}

@@ -57,7 +57,7 @@ export function StudentGrades({ grades, subjects }: StudentGradesProps) {
         <CardDescription>Aquí puedes ver tu progreso académico en cada materia.</CardDescription>
       </CardHeader>
       <CardContent>
-        <Table>
+        <div className="w-full overflow-x-auto">\n          <Table className="min-w-[560px]">
           <TableHeader>
             <TableRow>
               <TableHead className="font-bold">Materia</TableHead>
