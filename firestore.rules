@@ -110,7 +110,9 @@ service cloud.firestore {
     match /timetables/{timetableId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null && (
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'director' ||
+        (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'director'
+        ) ||
         (
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'orientador' &&
           exists(/databases/$(database)/documents/groups/$(request.resource.data.groupId)) &&
@@ -119,8 +121,11 @@ service cloud.firestore {
             get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.tempCounselorId == request.auth.uid
           )
         )
-      );
-      allow update, delete: if request.auth != null && (
+      ) &&
+      request.resource.data.teacherId is string &&
+      exists(/databases/$(database)/documents/academic_assignments/$(request.resource.data.groupId + '_' + request.resource.data.subjectId + '_' + request.resource.data.teacherId)) &&
+      get(/databases/$(database)/documents/academic_assignments/$(request.resource.data.groupId + '_' + request.resource.data.subjectId + '_' + request.resource.data.teacherId)).data.active == true;
+      allow update: if request.auth != null && (
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'director' ||
         (
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'orientador' &&
@@ -132,6 +137,19 @@ service cloud.firestore {
             request.resource.data.groupId == resource.data.groupId ||
             get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.counselorId == request.auth.uid ||
             get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.tempCounselorId == request.auth.uid
+          ) &&
+          request.resource.data.teacherId is string &&
+          exists(/databases/$(database)/documents/academic_assignments/$(request.resource.data.groupId + '_' + request.resource.data.subjectId + '_' + request.resource.data.teacherId)) &&
+          get(/databases/$(database)/documents/academic_assignments/$(request.resource.data.groupId + '_' + request.resource.data.subjectId + '_' + request.resource.data.teacherId)).data.active == true
+        )
+      );
+      allow delete: if request.auth != null && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'director' ||
+        (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'orientador' &&
+          (
+            get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.counselorId == request.auth.uid ||
+            get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.tempCounselorId == request.auth.uid
           )
         )
       );
