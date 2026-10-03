@@ -48,7 +48,9 @@ export interface Student {
 export interface Subject {
     id: string;
     name: string;
-    teacherId: string;
+    // Legacy compatibility. New relationships use AcademicAssignment.
+    teacherId?: string;
+    active?: boolean;
 }
 
 export interface TimetableEntry {
@@ -59,6 +61,16 @@ export interface TimetableEntry {
     teacherId?: string;
     day: 'Lunes' | 'Martes' | 'Miércoles' | 'Jueves' | 'Viernes';
     time: string; // e.g., "09:00 - 10:00"
+}
+
+export interface AcademicAssignment {
+    id: string;
+    groupId: string;
+    subjectId: string;
+    teacherId: string;
+    active?: boolean;
+    createdAt?: FieldValue;
+    updatedAt?: FieldValue;
 }
 
 export interface Attendance {
