@@ -8,7 +8,7 @@ import {
   addAcademicAssignment, addGroup, addSubject, addTeacher, addTimetableEntry,
   deleteAcademicAssignment, deleteTimetableEntry, fetchAcademicAssignments,
   fetchGroups, fetchGroupsByCounselor, fetchSubjects, fetchTimetableByGroups,
-  fetchUsers, updateAcademicAssignment, updateGroup, updateSubject, updateUser
+  fetchUsers, updateGroup, updateSubject, updateUser
 } from '@/lib/firebase/data';
 import type { AcademicAssignment, Group, Subject, TimetableEntry, User } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
