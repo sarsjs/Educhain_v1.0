@@ -180,16 +180,16 @@ function AppHeader({
   signOut: () => Promise<void>;
 }) {
   return (
-    <header className="flex h-14 items-center gap-4 border-b bg-card px-4 lg:h-[60px] lg:px-6">
+    <header className="flex min-w-0 h-14 items-center gap-2 border-b bg-card px-3 sm:gap-4 sm:px-4 lg:h-[60px] lg:px-6">
       <SidebarTrigger className="md:hidden" />
-      <div className="flex-1">
+      <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <h1 className="text-lg font-semibold md:text-2xl">{title}</h1>
+          <h1 className="truncate text-base font-semibold sm:text-lg md:text-2xl">{title}</h1>
         </div>
       </div>
-      <div className="flex items-center gap-4">
+      <div className="flex shrink-0 items-center gap-2 sm:gap-4">
         <ModeToggle />
-        <Button onClick={signOut} variant="outline">Cerrar Sesión</Button>
+        <Button onClick={signOut} variant="outline" className="px-3 sm:px-4">Cerrar Sesión</Button>
       </div>
     </header>
   )
@@ -236,12 +236,12 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
     <SidebarProvider defaultOpen>
       <div className="flex h-screen w-full">
         <AppSidebar user={profile} />
-        <SidebarInset className="flex flex-1 flex-col">
+        <SidebarInset className="flex min-w-0 flex-1 flex-col">
           <AppHeader
             title={title}
             signOut={signOut}
           />
-          <main className="flex-1 overflow-y-auto bg-muted/40 p-4 lg:p-8">
+          <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-muted/40 p-3 sm:p-4 lg:p-8">
             {children}
           </main>
         </SidebarInset>
