@@ -55,6 +55,8 @@ export interface TimetableEntry {
     id: string;
     groupId: string;
     subjectId: string;
+    // Profesor que imparte esta clase concreta. Opcional para conservar horarios antiguos.
+    teacherId?: string;
     day: 'Lunes' | 'Martes' | 'Miércoles' | 'Jueves' | 'Viernes';
     time: string; // e.g., "09:00 - 10:00"
 }
@@ -66,6 +68,7 @@ export interface Attendance {
     present: boolean;
     subjectId: string;
     groupId: string;
+    timetableId?: string;
 }
 
 export type RecipientFilter =
@@ -120,9 +123,74 @@ export interface SubstitutionRequest {
     fromCounselorId: string;
     toCounselorId: string;
     groupIds: string[];
+    date: string; // YYYY-MM-DD
+    startTime: string; // HH:MM
+    endTime: string; // HH:MM
     status: 'pending' | 'accepted' | 'declined';
     message?: string;
     timestamp: FieldValue;
+}
+
+export interface CounselorCoverage {
+    id: string;
+    groupId: string;
+    primaryCounselorId: string;
+    substituteCounselorId: string;
+    date: string; // YYYY-MM-DD
+    startTime: string; // HH:MM
+    endTime: string; // HH:MM
+    startsAt?: FieldValue;
+    endsAt?: FieldValue;
+    closedAt?: FieldValue;
+    closedBy?: string;
+    closingSummary?: string;
+    reason?: string;
+    status: 'active' | 'cancelled' | 'expired';
+    createdBy: string;
+    createdAt: FieldValue;
+}
+
+export type CounselorIncidentType =
+    | 'late_arrival'
+    | 'attendance_exception'
+    | 'student_incident'
+    | 'teacher_incident'
+    | 'group_incident'
+    | 'other';
+
+export type CounselorTakeoverReason = 'teacher_absent' | 'teacher_unavailable' | 'other';
+
+export interface CounselorClassTakeover {
+    id: string;
+    coverageId: string;
+    groupId: string;
+    timetableId: string;
+    subjectId: string;
+    teacherId: string;
+    counselorId: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    reason: CounselorTakeoverReason;
+    note?: string;
+    createdAt: FieldValue;
+}
+
+export interface CounselorIncidentReport {
+    id: string;
+    coverageId: string;
+    groupId: string;
+    date: string;
+    time: string;
+    type: CounselorIncidentType;
+    studentId?: string;
+    studentName?: string;
+    summary: string;
+    actionTaken?: string;
+    createdBy: string;
+    createdByName: string;
+    createdByRole: 'orientador' | 'director';
+    createdAt: FieldValue;
 }
 
 export interface AppConfig {
@@ -174,6 +242,31 @@ export interface WorkLog {
     checkOut?: FieldValue;
     status: 'present' | 'late' | 'absent';
     totalHours?: number;
+}
+
+/**
+ * Evidencia puntual de presencia física en el plantel durante la ventana
+ * automática de llegada (07:00, 07:05, 07:10, 07:15 y 07:20).
+ *
+ * No guarda coordenadas GPS crudas; conserva únicamente el resultado de la
+ * validación para reducir la exposición de ubicación precisa.
+ */
+export interface SchoolPresenceCheck {
+    id: string;
+    userId: string;
+    date: string; // YYYY-MM-DD
+    /** Grupo relacionado cuando la observación permite acotar la visibilidad del orientador. */
+    groupId?: string;
+    timetableId?: string;
+    checkTime: '07:00' | '07:05' | '07:10' | '07:15' | '07:20';
+    role: UserRole;
+    inside: boolean;
+    distanceMeters: number;
+    accuracyMeters?: number;
+    confidence: 'high' | 'medium' | 'low';
+    isMocked: boolean;
+    source: 'client-gps';
+    createdAt?: FieldValue;
 }
 
 export interface ChatMessage {

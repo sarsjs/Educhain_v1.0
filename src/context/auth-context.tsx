@@ -46,10 +46,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setUser(user);
       if (user) {
         try {
-          const profileByEmail = user.email ? await fetchUserByEmail(user.email) : null;
-          const profileById = !profileByEmail ? await fetchUserById(user.uid) : null;
+          // Firebase Auth UID is the canonical identity. Email is only a fallback
+          // for legacy profiles whose Firestore document was not created with the UID.
+          const profileById = await fetchUserById(user.uid);
+          const profileByEmail = !profileById && user.email
+            ? await fetchUserByEmail(user.email)
+            : null;
 
-          setProfile(profileByEmail || profileById || null); // Si no hay perfil, establece null pero NO CIERRES SESIÓN
+          setProfile(profileById || profileByEmail || null);
         } catch (error) {
           console.error("Error fetching user profile:", error);
           setProfile(null); // En caso de error, establece el perfil a null pero NO CIERRES SESIÓN

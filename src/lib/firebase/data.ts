@@ -1,8 +1,8 @@
-import { collection, getDocs, addDoc, doc, deleteDoc, query, where, updateDoc, writeBatch, orderBy, serverTimestamp, getDoc, deleteField, limit, onSnapshot, arrayUnion } from "firebase/firestore";
+import { collection, getDocs, addDoc, doc, deleteDoc, query, where, updateDoc, writeBatch, orderBy, serverTimestamp, getDoc, deleteField, limit, onSnapshot, arrayUnion, setDoc, Timestamp } from "firebase/firestore";
 import { db, storage } from "./client";
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
-import type { User, Group, Subject, TimetableEntry, Attendance, Message, Grade, CalendarEvent, SubstitutionRequest, WorkLog, ActivityLog, ChatMessage } from "@/lib/types";
+import type { User, Group, Subject, TimetableEntry, Attendance, Message, Grade, CalendarEvent, SubstitutionRequest, CounselorCoverage, CounselorClassTakeover, CounselorIncidentReport, WorkLog, ActivityLog, ChatMessage, SchoolPresenceCheck } from "@/lib/types";
 
 const fetchData = async <T>(fetchFunction: () => Promise<T[]>, entityName: string): Promise<T[]> => {
     try {
@@ -13,8 +13,8 @@ const fetchData = async <T>(fetchFunction: () => Promise<T[]>, entityName: strin
     }
 };
 
-// Substitution Requests
-export const createSubstitutionRequest = async (request: Omit<SubstitutionRequest, 'id' | 'timestamp'>) => {
+// Temporary counselor coverage: the titular counselor remains unchanged.
+export const createSubstitutionRequest = async (request: Omit<SubstitutionRequest, 'id' | 'timestamp' | 'status'>) => {
     return await addDoc(collection(db, "substitution_requests"), {
         ...request,
         timestamp: serverTimestamp(),
@@ -23,37 +23,46 @@ export const createSubstitutionRequest = async (request: Omit<SubstitutionReques
 };
 
 export const fetchSubstitutionRequests = async (toCounselorId: string): Promise<SubstitutionRequest[]> => fetchData(async () => {
-    const q = query(
-        collection(db, "substitution_requests"),
-        where("toCounselorId", "==", toCounselorId),
-        where("status", "==", "pending")
-    );
+    const q = query(collection(db, "substitution_requests"), where("toCounselorId", "==", toCounselorId));
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as SubstitutionRequest));
+    return querySnapshot.docs
+        .map(item => ({ id: item.id, ...item.data() } as unknown as SubstitutionRequest))
+        .filter(item => item.status === 'pending');
 }, 'substitution requests');
 
-export const handleSubstitutionRequest = async (requestId: string, status: 'accepted' | 'declined', requestBody?: SubstitutionRequest) => {
+export const handleSubstitutionRequest = async (
+    requestId: string,
+    status: 'accepted' | 'declined',
+    requestBody?: SubstitutionRequest
+) => {
     const requestRef = doc(db, "substitution_requests", requestId);
     await updateDoc(requestRef, { status });
 
     if (status === 'accepted' && requestBody) {
-        // Update all involved groups
         const batch = writeBatch(db);
+
         requestBody.groupIds.forEach(groupId => {
-            const groupRef = doc(db, "groups", groupId);
-            batch.update(groupRef, {
-                tempCounselorId: requestBody.toCounselorId,
-                absenceStatus: {
-                    isActive: true,
-                    message: requestBody.message || "Encargado por acuerdo entre orientadores."
-                }
-            });
+            const coverageRef = doc(collection(db, "counselor_coverages"));
+            batch.set(coverageRef, {
+                groupId,
+                primaryCounselorId: requestBody.fromCounselorId,
+                substituteCounselorId: requestBody.toCounselorId,
+                date: requestBody.date,
+                startTime: requestBody.startTime,
+                endTime: requestBody.endTime,
+                reason: requestBody.message || "Cobertura temporal entre orientadores.",
+                status: 'active',
+                createdBy: requestBody.toCounselorId,
+                startsAt: Timestamp.fromDate(coverageDateTime(requestBody.date, requestBody.startTime)),
+                endsAt: Timestamp.fromDate(coverageDateTime(requestBody.date, requestBody.endTime)),
+                createdAt: serverTimestamp()
+            } satisfies Omit<CounselorCoverage, 'id'>);
         });
+
         await batch.commit();
 
-        // Notify Director
         await addDoc(collection(db, "messages"), {
-            content: `Acuerdo de Suplencia: El orientador titular ha cedido el control de sus grupos al orientador suplente por acuerdo mutuo.`,
+            content: `Cobertura temporal: el orientador ${requestBody.toCounselorId} apoyará temporalmente los grupos acordados de ${requestBody.fromCounselorId}.`,
             recipientFilter: 'director',
             timestamp: serverTimestamp(),
             createdBy: requestBody.fromCounselorId,
@@ -61,6 +70,167 @@ export const handleSubstitutionRequest = async (requestId: string, status: 'acce
         });
     }
 };
+
+export const fetchCounselorCoverages = async (
+    groupIds: string[],
+    date: string
+): Promise<CounselorCoverage[]> => fetchData(async () => {
+    if (groupIds.length === 0) return [];
+    const q = query(
+        collection(db, "counselor_coverages"),
+        where("date", "==", date),
+        where("groupId", "in", groupIds.slice(0, 30))
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(item => ({ id: item.id, ...item.data() } as CounselorCoverage));
+}, 'counselor coverages');
+
+const coverageDateTime = (date: string, time: string) => {
+    const [year, month, day] = date.split('-').map(Number);
+    const [hour, minute] = time.split(':').map(Number);
+    return new Date(year, month - 1, day, hour, minute, 0, 0);
+};
+
+export const fetchCounselorCoveragesForCounselor = async (
+    counselorId: string,
+    date?: string
+): Promise<CounselorCoverage[]> => fetchData(async () => {
+    const [asSubstitute, asPrimary] = await Promise.all([
+        getDocs(query(collection(db, "counselor_coverages"), where("substituteCounselorId", "==", counselorId))),
+        getDocs(query(collection(db, "counselor_coverages"), where("primaryCounselorId", "==", counselorId))),
+    ]);
+    const map = new Map<string, CounselorCoverage>();
+    [...asSubstitute.docs, ...asPrimary.docs].forEach(item => {
+        const coverage = { id: item.id, ...item.data() } as CounselorCoverage;
+        if (!date || coverage.date === date) map.set(coverage.id, coverage);
+    });
+    return Array.from(map.values());
+}, 'counselor coverages for counselor');
+
+export const isCounselorCoverageActive = (coverage: CounselorCoverage, now = new Date()) => {
+    if (coverage.status !== 'active') return false;
+    const start = coverage.startsAt && typeof (coverage.startsAt as any).toDate === 'function'
+        ? (coverage.startsAt as any).toDate()
+        : coverageDateTime(coverage.date, coverage.startTime);
+    const end = coverage.endsAt && typeof (coverage.endsAt as any).toDate === 'function'
+        ? (coverage.endsAt as any).toDate()
+        : coverageDateTime(coverage.date, coverage.endTime);
+    return now >= start && now <= end;
+};
+
+export const closeCounselorCoverage = async (
+    coverageId: string,
+    counselorId: string,
+    closingSummary: string
+) => {
+    const coverageRef = doc(db, "counselor_coverages", coverageId);
+    const coverageSnap = await getDoc(coverageRef);
+    if (!coverageSnap.exists()) throw new Error("La cobertura ya no existe.");
+    const coverage = { id: coverageSnap.id, ...coverageSnap.data() } as CounselorCoverage;
+    if (coverage.substituteCounselorId !== counselorId && coverage.primaryCounselorId !== counselorId) {
+        throw new Error("No tienes autorización para cerrar esta cobertura.");
+    }
+    if (coverage.status !== 'active') throw new Error("La cobertura ya está cerrada.");
+    await updateDoc(coverageRef, {
+        status: 'expired',
+        closedAt: serverTimestamp(),
+        closedBy: counselorId,
+        closingSummary: closingSummary.trim(),
+    });
+};
+
+export const createCounselorClassTakeover = async (
+    takeover: Omit<CounselorClassTakeover, 'id' | 'createdAt'>
+) => {
+    const coverageSnap = await getDoc(doc(db, "counselor_coverages", takeover.coverageId));
+    if (!coverageSnap.exists()) throw new Error("La cobertura ya no existe.");
+    const coverage = { id: coverageSnap.id, ...coverageSnap.data() } as CounselorCoverage;
+    if (coverage.substituteCounselorId !== takeover.counselorId) {
+        throw new Error("Solo el orientador sustituto puede tomar este grupo.");
+    }
+    if (!isCounselorCoverageActive(coverage)) {
+        throw new Error("La cobertura no está activa en este momento.");
+    }
+    if (coverage.groupId !== takeover.groupId) {
+        throw new Error("El grupo no corresponde a la cobertura.");
+    }
+    const timetableSnap = await getDoc(doc(db, "timetables", takeover.timetableId));
+    if (!timetableSnap.exists()) throw new Error("La clase programada ya no existe.");
+    const timetable = timetableSnap.data() as TimetableEntry;
+    if (timetable.groupId !== takeover.groupId || timetable.subjectId !== takeover.subjectId) {
+        throw new Error("La clase no corresponde al grupo o materia indicados.");
+    }
+    const subjectSnap = await getDoc(doc(db, "subjects", takeover.subjectId));
+    if (!subjectSnap.exists()) throw new Error("La materia ya no existe.");
+    const subject = subjectSnap.data() as Subject;
+    const scheduledTeacherId = timetable.teacherId || subject.teacherId;
+    if (!scheduledTeacherId || scheduledTeacherId !== takeover.teacherId) {
+        throw new Error("El profesor indicado no corresponde a la clase programada.");
+    }
+    if (takeover.date !== coverage.date) throw new Error("La fecha no corresponde a la cobertura.");
+
+    const takeoverId = `${takeover.coverageId}_${takeover.timetableId}`;
+    const takeoverRef = doc(db, "counselor_class_takeovers", takeoverId);
+    const existingTakeover = await getDoc(takeoverRef);
+    if (existingTakeover.exists()) throw new Error("Esta clase ya fue tomada por el orientador.");
+    await setDoc(takeoverRef, {
+        ...takeover,
+        createdAt: serverTimestamp(),
+    });
+    return takeoverRef;
+};
+
+export const fetchCounselorClassTakeovers = async (
+    coverageIds: string[]
+): Promise<CounselorClassTakeover[]> => fetchData(async () => {
+    if (coverageIds.length === 0) return [];
+    const results: CounselorClassTakeover[] = [];
+    for (let i = 0; i < coverageIds.length; i += 30) {
+        const chunk = coverageIds.slice(i, i + 30);
+        const snapshot = await getDocs(query(
+            collection(db, "counselor_class_takeovers"),
+            where("coverageId", "in", chunk)
+        ));
+        results.push(...snapshot.docs.map(item => ({ id: item.id, ...item.data() } as CounselorClassTakeover)));
+    }
+    return results;
+}, 'counselor class takeovers');
+
+export const createCounselorIncidentReport = async (
+    report: Omit<CounselorIncidentReport, 'id' | 'createdAt'>
+) => {
+    const coverageSnap = await getDoc(doc(db, "counselor_coverages", report.coverageId));
+    if (!coverageSnap.exists()) throw new Error("La cobertura ya no existe.");
+
+    const coverage = { id: coverageSnap.id, ...coverageSnap.data() } as CounselorCoverage;
+    if (coverage.substituteCounselorId !== report.createdBy && coverage.primaryCounselorId !== report.createdBy) {
+        throw new Error("No tienes autorización para registrar novedades de esta cobertura.");
+    }
+    if (!isCounselorCoverageActive(coverage) && report.createdByRole !== 'director') {
+        throw new Error("La cobertura no está activa en este momento.");
+    }
+
+    return await addDoc(collection(db, "counselor_incident_reports"), {
+        ...report,
+        createdAt: serverTimestamp(),
+    });
+};
+
+export const fetchCounselorIncidentReports = async (
+    coverageIds: string[]
+): Promise<CounselorIncidentReport[]> => fetchData(async () => {
+    if (coverageIds.length === 0) return [];
+    const results: CounselorIncidentReport[] = [];
+    for (let i = 0; i < coverageIds.length; i += 30) {
+        const chunk = coverageIds.slice(i, i + 30);
+        const snapshot = await getDocs(query(
+            collection(db, "counselor_incident_reports"),
+            where("coverageId", "in", chunk)
+        ));
+        results.push(...snapshot.docs.map(item => ({ id: item.id, ...item.data() } as CounselorIncidentReport)));
+    }
+    return results.sort((x, y) => (y.date + " " + y.time).localeCompare(x.date + " " + x.time));
+}, 'counselor incident reports');
 
 // Fetch functions
 export const fetchUsers = async (): Promise<User[]> => fetchData(async () => {
@@ -88,6 +258,12 @@ export const fetchUserByEmail = async (email: string): Promise<User | null> => {
         return null;
     }
 };
+
+export const fetchUsersByRole = async (role: User['role']): Promise<User[]> => fetchData(async () => {
+    const q = query(collection(db, "users"), where("role", "==", role));
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as User));
+}, 'users by role');
 
 export const fetchUserById = async (id: string): Promise<User | null> => {
     try {
@@ -172,6 +348,28 @@ export const fetchTimetableByGroup = async (groupId: string): Promise<TimetableE
     return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as TimetableEntry));
 }, 'timetable by group');
 
+export const fetchTimetableByGroups = async (groupIds: string[]): Promise<TimetableEntry[]> => {
+    if (groupIds.length === 0) return [];
+    const results = await Promise.all(groupIds.map(fetchTimetableByGroup));
+    return results.flat();
+};
+
+export const fetchTimetableBySubject = async (subjectId: string): Promise<TimetableEntry[]> => fetchData(async () => {
+    const q = query(collection(db, "timetables"), where("subjectId", "==", subjectId));
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as TimetableEntry));
+}, 'timetable by subject');
+
+export const fetchGroupById = async (groupId: string): Promise<Group | null> => {
+    try {
+        const snapshot = await getDoc(doc(db, "groups", groupId));
+        return snapshot.exists() ? ({ id: snapshot.id, ...snapshot.data() } as unknown as Group) : null;
+    } catch (error) {
+        console.error("Error fetching group by id:", error);
+        return null;
+    }
+};
+
 export const fetchAllTimetables = async (): Promise<TimetableEntry[]> => fetchData(async () => {
     const querySnapshot = await getDocs(collection(db, "timetables"));
     return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as TimetableEntry));
@@ -227,9 +425,11 @@ export const fetchAttendanceForDate = async (date: string): Promise<Attendance[]
 }, 'attendance for date');
 
 export const fetchAttendanceByStudent = async (studentId: string): Promise<Attendance[]> => fetchData(async () => {
-    const q = query(collection(db, "attendance"), where("studentId", "==", studentId), orderBy("date", "desc"));
+    const q = query(collection(db, "attendance"), where("studentId", "==", studentId));
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as Attendance));
+    return querySnapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as unknown as Attendance))
+        .sort((a, b) => b.date.localeCompare(a.date));
 }, 'attendance by student');
 
 export const fetchGradesBySubjectAndGroup = async (subjectId: string, groupId: string): Promise<Grade[]> => fetchData(async () => {
@@ -258,20 +458,21 @@ export const fetchTeacherStudents = async (teacherId: string): Promise<User[]> =
         }
 
         // Obtener horarios basados en esas materias
-        const allTimetables = await fetchAllTimetables();
-        const groupIds = [...new Set(allTimetables
-            .filter(entry => subjectIds.includes(entry.subjectId))
-            .map(entry => entry.groupId))];
+        const timetableResults = await Promise.all(
+            subjectIds.map(subjectId => fetchTimetableBySubject(subjectId))
+        );
+        const groupIds = [...new Set(
+            timetableResults.flat().map(entry => entry.groupId)
+        )];
 
         if (groupIds.length === 0) {
             return [];
         }
 
-        // Obtener todos los usuarios y filtrar estudiantes de esos grupos
-        const allUsers = await fetchUsers();
-        return allUsers.filter(user =>
-            (user.role === 'estudiante' || user.role === 'alumno') && groupIds.includes(user.groupId)
+        const studentsByGroup = await Promise.all(
+            groupIds.map(groupId => fetchStudentsByGroup(groupId))
         );
+        return studentsByGroup.flat();
     } catch (error) {
         console.error("Error fetching teacher students:", error);
         return [];
@@ -359,35 +560,51 @@ export const fetchStudentTeachers = async (student: User): Promise<User[]> => {
     return await fetchStudentTeachersByGroupId(student.groupId);
 };
 
-export const fetchTimetableByTeacher = async (teacherId: string): Promise<TimetableEntry[]> => {
-    try {
-        // Primero obtener las materias del profesor
-        const subjects = await fetchSubjectsByTeacher(teacherId);
-        const subjectIds = subjects.map(subject => subject.id);
+export const fetchTimetableByTeacher = async (teacherId: string): Promise<TimetableEntry[]> => fetchData(async () => {
+    const q = query(collection(db, "timetables"), where("teacherId", "==", teacherId));
+    const querySnapshot = await getDocs(q);
+    const direct = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as TimetableEntry));
 
-        if (subjectIds.length === 0) {
-            return [];
-        }
+    // Compatibilidad: horarios antiguos todavía pueden no tener teacherId.
+    const legacySubjects = await fetchSubjectsByTeacher(teacherId);
+    const legacyResults = await Promise.all(
+        legacySubjects.map((subject) => fetchTimetableBySubject(subject.id))
+    );
+    const legacy = legacyResults.flat().filter((entry) => !entry.teacherId);
+    const seen = new Set(direct.map((entry) => entry.id));
+    return [...direct, ...legacy.filter((entry) => !seen.has(entry.id))];
+}, 'timetable by teacher');
 
-        // Obtener todos los horarios y filtrar por las materias del profesor
-        const allTimetables = await fetchAllTimetables();
-        return allTimetables.filter(entry => subjectIds.includes(entry.subjectId));
-    } catch (error) {
-        console.error("Error fetching timetable by teacher:", error);
-        return [];
-    }
+export const fetchSubjectById = async (subjectId: string): Promise<Subject | null> => fetchData(async () => {
+    const snapshot = await getDoc(doc(db, "subjects", subjectId));
+    return snapshot.exists() ? ({ id: snapshot.id, ...snapshot.data() } as unknown as Subject) : null;
+}, 'subject by id');
+
+export const fetchSubjectsByIds = async (subjectIds: string[]): Promise<Subject[]> => {
+    if (subjectIds.length === 0) return [];
+    const results = await Promise.all(subjectIds.map(fetchSubjectById));
+    return results.filter((subject): subject is Subject => subject !== null);
 };
 
 // Functions for the unified user model
-export const fetchStudents = async (): Promise<User[]> => {
-    const allUsers = await fetchUsers();
-    return allUsers.filter(user => user.role === 'estudiante' || user.role === 'alumno');
-};
+export const fetchStudents = async (): Promise<User[]> => fetchData(async () => {
+    const q = query(
+        collection(db, "users"),
+        where("role", "in", ["estudiante", "alumno"])
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as User));
+}, 'students');
 
-export const fetchStudentsByGroup = async (groupId: string): Promise<User[]> => {
-    const allStudents = await fetchStudents();
-    return allStudents.filter(student => student.groupId === groupId);
-};
+export const fetchStudentsByGroup = async (groupId: string): Promise<User[]> => fetchData(async () => {
+    const q = query(
+        collection(db, "users"),
+        where("role", "in", ["estudiante", "alumno"]),
+        where("groupId", "==", groupId)
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as User));
+}, 'students by group');
 
 // Función para obtener un usuario por ID
 
@@ -559,6 +776,26 @@ export const sendMessage = async (message: Omit<Message, "id" | "timestamp">) =>
     });
 };
 
+/**
+ * Guarda una observación de presencia general en el plantel.
+ * El ID es determinista por usuario/día/intervalo para evitar duplicados.
+ */
+export const recordSchoolPresenceCheck = async (check: Omit<SchoolPresenceCheck, "id" | "createdAt">) => {
+    const scopeId = check.groupId || 'school';
+    const id = check.userId + "_" + check.date + "_" + check.checkTime.replace(":", "") + "_" + scopeId;
+    const ref = doc(db, "school_presence_checks", id);
+    await setDoc(ref, { ...check, createdAt: serverTimestamp() }, { merge: true });
+    return id;
+};
+
+export const fetchSchoolPresenceChecks = async (date: string, userId?: string, groupIds?: string[]): Promise<SchoolPresenceCheck[]> => fetchData(async () => {
+    let q = query(collection(db, "school_presence_checks"), where("date", "==", date));
+    if (userId) q = query(q, where("userId", "==", userId));
+    else if (groupIds && groupIds.length > 0) q = query(q, where("groupId", "in", groupIds.slice(0, 30)));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(item => ({ id: item.id, ...item.data() } as SchoolPresenceCheck));
+}, "school presence checks");
+
 export const updateUserStatus = async (userId: string, status: 'inside' | 'outside' | 'coming' | 'unknown', userName?: string) => {
     const userRef = doc(db, "users", userId);
     await updateDoc(userRef, {
@@ -632,12 +869,19 @@ export const fetchWorkLogs = async (date?: string, userId?: string): Promise<Wor
 /**
  * Generates a temporary 4-digit code for a class session.
  */
-export const generateAttendanceToken = async (subjectId: string, groupId: string) => {
+export const generateAttendanceToken = async (subjectId: string, groupId: string, timetableId: string, options?: { coverageId?: string; createdBy?: string; createdByRole?: User['role']; teacherLocation?: { latitude: number; longitude: number; accuracy?: number } }) => {
     const code = Math.floor(1000 + Math.random() * 9000).toString();
+    const date = getTodayDateKey();
     const tokenData = {
         subjectId,
         groupId,
+        timetableId,
         code,
+        date,
+        ...(options?.coverageId ? { coverageId: options.coverageId, takeoverId: options.coverageId + "_" + timetableId } : {}),
+        ...(options?.createdBy ? { createdBy: options.createdBy } : {}),
+        ...(options?.createdByRole ? { createdByRole: options.createdByRole } : {}),
+        ...(options?.teacherLocation ? { teacherLocation: options.teacherLocation } : {}),
         expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes validity
         createdAt: serverTimestamp()
     };
@@ -656,15 +900,78 @@ export const verifyAttendanceToken = async (groupId: string, code: string) => {
         where("code", "==", code)
     );
 
-    const querySnapshot = await getDocs(q);
     if (querySnapshot.empty) return null;
 
-    const tokenDoc = querySnapshot.docs[0].data();
-    const expiresAt = tokenDoc.expiresAt.toDate();
+    // There can be more than one token with the same 4-digit code over time.
+    // Pick the currently valid token for today instead of trusting the first result.
+    const today = getTodayDateKey();
+    const validToken = querySnapshot.docs.find((snapshot) => {
+        const tokenDoc = snapshot.data();
+        const expiresAt = tokenDoc.expiresAt?.toDate?.() ?? new Date(tokenDoc.expiresAt);
+        return (
+            tokenDoc.date === today &&
+            now <= expiresAt &&
+            tokenDoc.teacherLocation?.latitude != null &&
+            tokenDoc.teacherLocation?.longitude != null
+        );
+    });
 
-    if (now > expiresAt) return null; // Token expired
+    if (!validToken) return null;
 
-    return tokenDoc;
+    const tokenDoc = validToken.data();
+
+    return {
+        tokenId: validToken.id,
+        subjectId: tokenDoc.subjectId as string,
+        groupId: tokenDoc.groupId as string,
+        date: tokenDoc.date as string,
+        timetableId: tokenDoc.timetableId as string,
+        expiresAt: tokenDoc.expiresAt,
+        teacherLocation: tokenDoc.teacherLocation as { latitude: number; longitude: number; accuracy?: number },
+    };
+};
+
+export const registerAttendanceFromToken = async ({
+    studentId,
+    groupId,
+    tokenId,
+    subjectId,
+    date,
+    timetableId,
+    studentLocation,
+    distanceToTeacher,
+}: {
+    studentId: string;
+    groupId: string;
+    tokenId: string;
+    subjectId: string;
+    date: string;
+    timetableId: string;
+    studentLocation: { latitude: number; longitude: number; accuracy?: number };
+    distanceToTeacher: number;
+}) => {
+    const attendanceId = studentId + "_" + date + "_" + timetableId;
+    const attendanceRef = doc(db, "attendance", attendanceId);
+    const existing = await getDoc(attendanceRef);
+
+    if (existing.exists()) {
+        return { id: attendanceId, alreadyRegistered: true };
+    }
+
+    await setDoc(attendanceRef, {
+        studentId,
+        groupId,
+        subjectId,
+        timetableId,
+        date,
+        present: true,
+        tokenId,
+        studentLocation,
+        distanceToTeacher,
+        createdAt: serverTimestamp(),
+    });
+
+    return { id: attendanceId, alreadyRegistered: false };
 };
 
 /**
@@ -706,8 +1013,8 @@ export const DEFAULT_APP_CONFIG: Omit<AppConfig, 'id'> = {
     },
     geofence: {
         enabled: true,
-        center: { lat: 19.432608, lng: -99.133209 }, // Default Center (CDMX)
-        radius: 200
+        center: { lat: 19.0801094, lng: -98.8468597 }, // EPO 264
+        radius: 150
     },
     features: {
         badges: true,
@@ -744,4 +1051,10 @@ export const updateAppConfig = async (configId: string, updates: Partial<AppConf
         console.error("Error updating app config:", error);
         throw error;
     }
+};
+
+
+export const getTodayDateKey = () => {
+    const now = new Date();
+    return now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
 };
