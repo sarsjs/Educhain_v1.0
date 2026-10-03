@@ -29,6 +29,11 @@ service cloud.firestore {
             )
           ) ||
           (
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'orientador' &&
+            resource.data.role == 'profesor' &&
+            request.resource.data.role == 'profesor'
+          ) ||
+          (
             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'profesor' &&
             resource.data.role in ['estudiante', 'alumno'] &&
             request.resource.data.diff(resource.data).changedKeys().hasOnly(['badges'])
@@ -36,18 +41,68 @@ service cloud.firestore {
         );
     }
 
-    // Groups collection - read allowed for all roles, write only for directors
+    // Groups: director sees/manages all; orientador manages only groups in their scope.
     match /groups/{groupId} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null &&
-                   get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'director';
+      allow create: if request.auth != null && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'director' ||
+        (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'orientador' &&
+          request.resource.data.counselorId == request.auth.uid
+        )
+      );
+      allow update: if request.auth != null && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'director' ||
+        (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'orientador' &&
+          resource.data.counselorId == request.auth.uid &&
+          request.resource.data.counselorId == request.auth.uid
+        )
+      );
+      allow delete: if request.auth != null && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'director' ||
+        (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'orientador' &&
+          resource.data.counselorId == request.auth.uid
+        )
+      );
     }
 
-    // Subjects collection - read for all roles, write only for directors
+    // Subjects are a school-wide catalog. New relationships to teachers/groups
+    // live in academic_assignments, not in this catalog.
     match /subjects/{subjectId} {
       allow read: if request.auth != null;
       allow write: if request.auth != null &&
-                   get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'director';
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['director', 'orientador'];
+    }
+
+    // Teacher-subject-group relationship.
+    match /academic_assignments/{assignmentId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'director' ||
+        (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'orientador' &&
+          get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.counselorId == request.auth.uid
+        )
+      ) &&
+      exists(/databases/$(database)/documents/users/$(request.resource.data.teacherId)) &&
+      get(/databases/$(database)/documents/users/$(request.resource.data.teacherId)).data.role == 'profesor' &&
+      exists(/databases/$(database)/documents/subjects/$(request.resource.data.subjectId));
+      allow update: if request.auth != null && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'director' ||
+        (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'orientador' &&
+          get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.counselorId == request.auth.uid &&
+          get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.counselorId == request.auth.uid
+        )
+      );
+      allow delete: if request.auth != null && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'director' ||
+        (
+          get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.counselorId == request.auth.uid
+        )
+      );
     }
 
     // Timetables: director has full control; orientador may manage schedules
