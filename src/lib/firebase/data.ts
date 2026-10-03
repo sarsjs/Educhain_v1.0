@@ -2,7 +2,7 @@ import { collection, getDocs, addDoc, doc, deleteDoc, query, where, updateDoc, w
 import { db, storage } from "./client";
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
-import type { User, Group, Subject, TimetableEntry, Attendance, Message, Grade, CalendarEvent, SubstitutionRequest, CounselorCoverage, CounselorClassTakeover, CounselorIncidentReport, WorkLog, ActivityLog, ChatMessage, SchoolPresenceCheck } from "@/lib/types";
+import type { User, Group, Subject, TimetableEntry, Attendance, Message, Grade, CalendarEvent, SubstitutionRequest, CounselorCoverage, CounselorClassTakeover, CounselorIncidentReport, WorkLog, ActivityLog, ChatMessage, SchoolPresenceCheck, AcademicAssignment } from "@/lib/types";
 
 const fetchData = async <T>(fetchFunction: () => Promise<T[]>, entityName: string): Promise<T[]> => {
     try {
@@ -341,6 +341,44 @@ export const fetchSubjectsByTeacher = async (teacherId: string): Promise<Subject
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as Subject));
 }, 'subjects by teacher');
+
+export const fetchAcademicAssignments = async (groupIds?: string[]): Promise<AcademicAssignment[]> => fetchData(async () => {
+    let q = query(collection(db, "academic_assignments"));
+    if (groupIds && groupIds.length > 0) {
+        const results: AcademicAssignment[] = [];
+        for (let i = 0; i < groupIds.length; i += 30) {
+            const chunk = groupIds.slice(i, i + 30);
+            const snapshot = await getDocs(query(collection(db, "academic_assignments"), where("groupId", "in", chunk)));
+            results.push(...snapshot.docs.map(item => ({ id: item.id, ...item.data() } as AcademicAssignment)));
+        }
+        return results;
+    }
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(item => ({ id: item.id, ...item.data() } as AcademicAssignment));
+}, 'academic assignments');
+
+export const fetchAcademicAssignmentsByTeacher = async (teacherId: string): Promise<AcademicAssignment[]> => fetchData(async () => {
+    const q = query(collection(db, "academic_assignments"), where("teacherId", "==", teacherId), where("active", "==", true));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(item => ({ id: item.id, ...item.data() } as AcademicAssignment));
+}, 'academic assignments by teacher');
+
+export const addAcademicAssignment = async (assignment: Omit<AcademicAssignment, "id" | "createdAt" | "updatedAt">) => {
+    const ref = doc(db, "academic_assignments", `${assignment.groupId}_${assignment.subjectId}_${assignment.teacherId}`);
+    await setDoc(ref, {
+        ...assignment,
+        active: assignment.active ?? true,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+    });
+    return ref.id;
+};
+
+export const updateAcademicAssignment = async (assignmentId: string, data: Partial<Omit<AcademicAssignment, "id">>) =>
+    updateDoc(doc(db, "academic_assignments", assignmentId), { ...data, updatedAt: serverTimestamp() });
+
+export const deleteAcademicAssignment = async (assignmentId: string) =>
+    deleteDoc(doc(db, "academic_assignments", assignmentId));
 
 export const fetchTimetableByGroup = async (groupId: string): Promise<TimetableEntry[]> => fetchData(async () => {
     const q = query(collection(db, "timetables"), where("groupId", "==", groupId));
@@ -696,7 +734,7 @@ export const addBadgeSuggestion = async (payload: { studentId?: string; badgeNam
         createdAt: serverTimestamp()
     });
 };
-export const addSubject = async (subject: Omit<Subject, "id">) => await addDoc(collection(db, "subjects"), subject);
+export const addSubject = async (subject: Omit<Subject, "id">) => await addDoc(collection(db, "subjects"), { ...subject, active: subject.active ?? true });
 export const updateSubject = async (subjectId: string, data: Partial<Subject>) => await updateDoc(doc(db, "subjects", subjectId), data);
 export const addTimetableEntry = async (entry: Omit<TimetableEntry, "id">) => await addDoc(collection(db, "timetables"), entry);
 // Función para enviar mensajes a múltiples destinatarios según filtros
@@ -721,6 +759,18 @@ export const addEvent = async (event: Omit<CalendarEvent, "id" | "createdAt">) =
 };
 
 // Function to add a student using Cloud Functions for unified user model
+export const addTeacher = async (teacherData: { name: string; email: string; password?: string }) => {
+    const functions = getFunctions();
+    const createUser = httpsCallable(functions, 'createUser');
+    return await createUser({ ...teacherData, role: 'profesor' });
+};
+
+export const deleteUserAccount = async (userId: string) => {
+    const functions = getFunctions();
+    const deleteUser = httpsCallable(functions, 'deleteUser');
+    return await deleteUser({ uid: userId });
+};
+
 export const addStudent = async (studentData: Omit<User, "id" | "role"> & { groupId?: string }) => {
     const functions = getFunctions();
     const createUser = httpsCallable(functions, 'createUser');

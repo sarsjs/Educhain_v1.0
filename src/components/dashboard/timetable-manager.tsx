@@ -85,7 +85,7 @@ export function TimetableManager({
 
   const teacherBySubject = React.useMemo(() => {
     return subjects.reduce<Record<string, string>>((acc, subject) => {
-      acc[subject.id] = subject.teacherId;
+      if (subject.teacherId) acc[subject.id] = subject.teacherId;
       return acc;
     }, {});
   }, [subjects]);
@@ -122,7 +122,7 @@ export function TimetableManager({
 
   const detectConflict = (newEntry: Omit<TimetableEntry, 'id'>) => {
     const candidateRange = parseRange(newEntry.time);
-    const teacherId = teacherBySubject[newEntry.subjectId];
+    const teacherId = newEntry.teacherId || teacherBySubject[newEntry.subjectId];
 
     const conflict = entries.find((entry) => {
       if (entry.day !== newEntry.day) return false;
@@ -194,6 +194,7 @@ export function TimetableManager({
       await onAddEntry({
         groupId: selectedGroupId,
         subjectId,
+        teacherId: teacherBySubject[subjectId],
         day,
         time: timeRange,
       });
@@ -345,7 +346,7 @@ export function TimetableManager({
               <ScrollArea className="h-72 pr-2">
                 <div className="space-y-3">
                   {timetableByDay[d].map((entry) => {
-                    const teacherId = teacherBySubject[entry.subjectId];
+                    const teacherId = entry.teacherId || teacherBySubject[entry.subjectId];
                     return (
                       <div
                         key={entry.id}
