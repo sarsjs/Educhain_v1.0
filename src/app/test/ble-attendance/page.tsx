@@ -16,6 +16,13 @@ export default function BleAttendanceTestPage() {
   const [detections, setDetections] = React.useState<BleDetection[]>([]);
   const [error, setError] = React.useState('');
   const [running, setRunning] = React.useState(false);
+  const [testIdentity, setTestIdentity] = React.useState('teacher');
+  const testProfiles = [
+    { id: 'teacher', role: 'Profesor', name: 'José Martínez', group: '—' },
+    { id: 'student1', role: 'Alumno', name: 'Ana López', group: '1A' },
+    { id: 'student2', role: 'Alumno', name: 'Carlos Hernández', group: '1A' },
+    { id: 'student3', role: 'Alumno', name: 'María García', group: '1A' },
+  ];
 
   const startTeacher = async () => {
     setError('');
@@ -77,6 +84,23 @@ export default function BleAttendanceTestPage() {
         </div>
 
         {!running ? (
+          <>
+          <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+            <p className="text-xs font-bold uppercase tracking-widest text-slate-500">Identidad de prueba</p>
+            <p className="mt-1 text-sm text-slate-400">No son cuentas Firebase; son perfiles de laboratorio para identificar cada teléfono durante la prueba.</p>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              {testProfiles.map((profile) => (
+                <button
+                  key={profile.id}
+                  onClick={() => setTestIdentity(profile.id)}
+                  className={`rounded-xl border p-3 text-left ${testIdentity === profile.id ? 'border-emerald-500 bg-emerald-950/30' : 'border-slate-700 bg-slate-950'}`}
+                >
+                  <span className="block font-bold">{profile.name}</span>
+                  <span className="text-xs text-slate-400">{profile.role} · Grupo {profile.group}</span>
+                </button>
+              ))}
+            </div>
+          </section>
           <div className="grid gap-4 sm:grid-cols-2">
             <button
               onClick={startTeacher}
@@ -97,12 +121,14 @@ export default function BleAttendanceTestPage() {
               </span>
             </button>
           </div>
+          </>
         ) : (
           <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-xs uppercase tracking-widest text-slate-500">Modo activo</p>
-                <p className="text-xl font-bold">{role === 'teacher' ? 'Profesor' : 'Alumno'}</p>
+                <p className="text-xl font-bold">{testProfiles.find((p) => p.id === testIdentity)?.name}</p>
+                <p className="text-xs text-slate-400">{testProfiles.find((p) => p.id === testIdentity)?.role} · Grupo {testProfiles.find((p) => p.id === testIdentity)?.group}</p>
               </div>
               <button onClick={stop} className="rounded-xl bg-red-500 px-4 py-2 text-sm font-bold">
                 Detener
