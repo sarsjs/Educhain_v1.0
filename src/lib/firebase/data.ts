@@ -364,7 +364,7 @@ export const fetchAcademicAssignmentsByTeacher = async (teacherId: string): Prom
 }, 'academic assignments by teacher');
 
 export const addAcademicAssignment = async (assignment: Omit<AcademicAssignment, "id" | "createdAt" | "updatedAt">) => {
-    const ref = doc(collection(db, "academic_assignments"));
+    const ref = doc(db, "academic_assignments", `${assignment.groupId}_${assignment.subjectId}_${assignment.teacherId}`);
     await setDoc(ref, {
         ...assignment,
         active: assignment.active ?? true,
