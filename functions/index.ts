@@ -75,6 +75,7 @@ export const createUser = functions.region('us-central1').https.onCall(async (da
       name,
       email: emailLower,
       role,
+      status: 'active',
       avatarUrl,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     };
