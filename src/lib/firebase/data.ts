@@ -900,23 +900,34 @@ export const verifyAttendanceToken = async (groupId: string, code: string) => {
         where("code", "==", code)
     );
 
-    const querySnapshot = await getDocs(q);
     if (querySnapshot.empty) return null;
 
-    const tokenSnapshot = querySnapshot.docs[0];
-    const tokenDoc = tokenSnapshot.data();
-    const expiresAt = tokenDoc.expiresAt?.toDate?.() ?? new Date(tokenDoc.expiresAt);
+    // There can be more than one token with the same 4-digit code over time.
+    // Pick the currently valid token for today instead of trusting the first result.
+    const today = getTodayDateKey();
+    const validToken = querySnapshot.docs.find((snapshot) => {
+        const tokenDoc = snapshot.data();
+        const expiresAt = tokenDoc.expiresAt?.toDate?.() ?? new Date(tokenDoc.expiresAt);
+        return (
+            tokenDoc.date === today &&
+            now <= expiresAt &&
+            tokenDoc.teacherLocation?.latitude != null &&
+            tokenDoc.teacherLocation?.longitude != null
+        );
+    });
 
-    if (now > expiresAt) return null;
+    if (!validToken) return null;
+
+    const tokenDoc = validToken.data();
 
     return {
-        tokenId: tokenSnapshot.id,
+        tokenId: validToken.id,
         subjectId: tokenDoc.subjectId as string,
         groupId: tokenDoc.groupId as string,
         date: tokenDoc.date as string,
         timetableId: tokenDoc.timetableId as string,
         expiresAt: tokenDoc.expiresAt,
-        teacherLocation: tokenDoc.teacherLocation as { latitude: number; longitude: number; accuracy?: number } | undefined,
+        teacherLocation: tokenDoc.teacherLocation as { latitude: number; longitude: number; accuracy?: number },
     };
 };
 
