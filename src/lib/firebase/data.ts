@@ -559,6 +559,19 @@ export const createAttendanceAppeal = async (studentId:string, attendanceId:stri
  const ref=doc(db,"attendance_appeals",attendanceId+"_"+studentId), old=await getDoc(ref);
  if(old.exists()&&['pending','teacher_confirmed','counselor_confirmed'].includes(String(old.data().status))) return ref;
  await setDoc(ref,{attendanceId,studentId,teacherId,counselorId:g.counselorId,subjectId:a.subjectId,groupId:a.groupId,date:a.date,status:'pending',studentMessage:studentMessage?.trim()||'Estoy presente; solicito revisión de mi asistencia.',originalPresent:false,originalPresenceEvidence:a.presenceEvidence||'not_checked',originalGpsStatusAtCheck:a.gpsStatusAtCheck||'unknown',originalGpsDistanceMeters:a.gpsDistanceMeters,createdAt:serverTimestamp()});
+ const subjectName = String(s.name || 'la materia');
+ const notification = {
+   content: `Apelación de asistencia: un alumno solicita revisión de su falta en ${subjectName}. Se requiere confirmación física.`,
+   recipientFilter: 'student' as const,
+   recipientLabel: 'Revisión de asistencia',
+   createdBy: studentId,
+   createdByRole: 'estudiante' as const,
+   timestamp: serverTimestamp()
+ };
+ await Promise.all([
+   setDoc(doc(db,'messages',`attendance_appeal_teacher_${attendanceId}`), {...notification, recipientFilter:'specificTeacher', recipientId:teacherId}, {merge:true}),
+   setDoc(doc(db,'messages',`attendance_appeal_counselor_${attendanceId}`), {...notification, recipientFilter:'specificCounselor', recipientId:g.counselorId}, {merge:true})
+ ]);
  return ref;
 };
 export const confirmAttendanceAppeal = async (appealId:string, role:'profesor'|'orientador', userId:string) => {
