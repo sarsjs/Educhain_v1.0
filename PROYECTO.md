@@ -357,3 +357,9 @@ Este es un componente fundamental para el éxito comercial y operativo del proye
     * `test_...`: Cualquier registro manual hecho durante el desarrollo inicial.
 
 ---
+
+02/10/2026 00:00 - Prototipo BLE de pase de lista automático.
+* **Añadido:** Rama experimental `feature/ble-auto-attendance` para validar pase de lista por proximidad Bluetooth Low Energy sin modificar `main` ni la asistencia V1 existente.
+* **Añadido:** Adaptador `src/lib/ble-attendance.ts` para modo periférico (profesor) y central (alumno), con sesión BLE temporal y sin datos personales en la señal anunciada.
+* **Añadido:** Página de laboratorio `/test/ble-attendance` para probar detección y RSSI entre teléfonos reales.
+* **Pendiente:** Probar Android/iOS físicamente y medir falsos positivos entre salones; después definir el registro de dispositivo por cuenta y la confirmación final del profesor.

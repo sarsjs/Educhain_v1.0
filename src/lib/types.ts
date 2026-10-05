@@ -7,6 +7,7 @@ export interface User {
     name: string;
     email: string;
     role: UserRole;
+    status?: 'active' | 'inactive';
     groupId?: string;
     groups?: string[];
     matricula?: string;
@@ -24,6 +25,9 @@ export interface Group {
     semester: number;
     cycleId: string;
     counselorId: string;
+    /** Director que queda formalmente a cargo del grupo, sin quitar al orientador titular. */
+    directorInChargeId?: string;
+    active?: boolean;
     tempCounselorId?: string; // ID del orientador suplente
     absenceStatus?: {
         isActive: boolean;
@@ -48,16 +52,32 @@ export interface Student {
 export interface Subject {
     id: string;
     name: string;
-    teacherId: string;
+    // Legacy compatibility. New relationships use AcademicAssignment.
+    teacherId?: string;
+    active?: boolean;
 }
 
 export interface TimetableEntry {
     id: string;
     groupId: string;
     subjectId: string;
+    // Profesor que imparte esta clase concreta. Opcional para conservar horarios antiguos.
+    teacherId?: string;
     day: 'Lunes' | 'Martes' | 'Miércoles' | 'Jueves' | 'Viernes';
     time: string; // e.g., "09:00 - 10:00"
 }
+
+export interface AcademicAssignment {
+    id: string;
+    groupId: string;
+    subjectId: string;
+    teacherId: string;
+    active?: boolean;
+    createdAt?: FieldValue;
+    updatedAt?: FieldValue;
+}
+
+export type AttendanceSource = 'teacher' | 'ble' | 'counselor' | 'director_audit';
 
 export interface Attendance {
     id: string;
@@ -66,6 +86,38 @@ export interface Attendance {
     present: boolean;
     subjectId: string;
     groupId: string;
+    timetableId?: string;
+    source?: AttendanceSource;
+    recordedBy?: string;
+    recordedByRole?: UserRole;
+    /** Resultado de la comprobación física usada por BLE/GPS antes de confirmar. */
+    presenceEvidence?: 'detected' | 'not_detected' | 'not_checked';
+    gpsDistanceMeters?: number;
+    gpsStatusAtCheck?: 'inside' | 'outside' | 'coming' | 'unknown';
+    /** Se conserva cuando un director contradice la evidencia automática. */
+    directorOverride?: boolean;
+    directorOverrideReason?: string;
+    directorOverrideAt?: FieldValue;
+    directorOverrideBy?: string;
+    /** El profesor recibió la advertencia de evidencia negativa y decidió continuar. */
+    teacherEvidenceWarning?: boolean;
+    teacherEvidenceAcknowledged?: boolean;
+    teacherEvidenceAcknowledgedAt?: FieldValue;
+    teacherEvidenceAcknowledgedBy?: string;
+    appealId?: string;
+    appealResolved?: boolean;
+    appealResolvedAt?: FieldValue;
+    appealResolvedBy?: string;
+    appealResolutionReason?: string;
+}
+
+export type AttendanceAppealStatus = 'pending' | 'teacher_confirmed' | 'counselor_confirmed' | 'resolved' | 'rejected';
+export interface AttendanceAppeal {
+ id:string; attendanceId:string; studentId:string; teacherId:string; counselorId:string; subjectId:string; groupId:string; date:string;
+ status:AttendanceAppealStatus; studentMessage?:string; originalPresent:false; originalPresenceEvidence?:Attendance['presenceEvidence'];
+ originalGpsStatusAtCheck?:Attendance['gpsStatusAtCheck']; originalGpsDistanceMeters?:number; createdAt:FieldValue;
+ teacherConfirmedBy?:string; teacherConfirmedAt?:FieldValue; counselorConfirmedBy?:string; counselorConfirmedAt?:FieldValue;
+ resolvedAt?:FieldValue; resolvedBy?:string; resolution?:'present'|'rejected'; resolutionReason?:string;
 }
 
 export type RecipientFilter =
@@ -120,9 +172,74 @@ export interface SubstitutionRequest {
     fromCounselorId: string;
     toCounselorId: string;
     groupIds: string[];
-    status: 'pending' | 'accepted' | 'declined';
+    date: string; // YYYY-MM-DD
+    startTime: string; // HH:MM
+    endTime: string; // HH:MM
+    status: 'pending' | 'accepted' | 'declined' | 'cancelled';
     message?: string;
     timestamp: FieldValue;
+}
+
+export interface CounselorCoverage {
+    id: string;
+    groupId: string;
+    primaryCounselorId: string;
+    substituteCounselorId: string;
+    date: string; // YYYY-MM-DD
+    startTime: string; // HH:MM
+    endTime: string; // HH:MM
+    startsAt?: FieldValue;
+    endsAt?: FieldValue;
+    closedAt?: FieldValue;
+    closedBy?: string;
+    closingSummary?: string;
+    reason?: string;
+    status: 'scheduled' | 'active' | 'cancelled' | 'expired';
+    createdBy: string;
+    createdAt: FieldValue;
+}
+
+export type CounselorIncidentType =
+    | 'late_arrival'
+    | 'attendance_exception'
+    | 'student_incident'
+    | 'teacher_incident'
+    | 'group_incident'
+    | 'other';
+
+export type CounselorTakeoverReason = 'teacher_absent' | 'teacher_unavailable' | 'other';
+
+export interface CounselorClassTakeover {
+    id: string;
+    coverageId: string;
+    groupId: string;
+    timetableId: string;
+    subjectId: string;
+    teacherId: string;
+    counselorId: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    reason: CounselorTakeoverReason;
+    note?: string;
+    createdAt: FieldValue;
+}
+
+export interface CounselorIncidentReport {
+    id: string;
+    coverageId: string;
+    groupId: string;
+    date: string;
+    time: string;
+    type: CounselorIncidentType;
+    studentId?: string;
+    studentName?: string;
+    summary: string;
+    actionTaken?: string;
+    createdBy: string;
+    createdByName: string;
+    createdByRole: 'orientador' | 'director';
+    createdAt: FieldValue;
 }
 
 export interface AppConfig {
@@ -174,6 +291,31 @@ export interface WorkLog {
     checkOut?: FieldValue;
     status: 'present' | 'late' | 'absent';
     totalHours?: number;
+}
+
+/**
+ * Evidencia puntual de presencia física en el plantel durante la ventana
+ * automática de llegada (07:00, 07:05, 07:10, 07:15 y 07:20).
+ *
+ * No guarda coordenadas GPS crudas; conserva únicamente el resultado de la
+ * validación para reducir la exposición de ubicación precisa.
+ */
+export interface SchoolPresenceCheck {
+    id: string;
+    userId: string;
+    date: string; // YYYY-MM-DD
+    /** Grupo relacionado cuando la observación permite acotar la visibilidad del orientador. */
+    groupId?: string;
+    timetableId?: string;
+    checkTime: '07:00' | '07:05' | '07:10' | '07:15' | '07:20';
+    role: UserRole;
+    inside: boolean;
+    distanceMeters: number;
+    accuracyMeters?: number;
+    confidence: 'high' | 'medium' | 'low';
+    isMocked: boolean;
+    source: 'client-gps';
+    createdAt?: FieldValue;
 }
 
 export interface ChatMessage {

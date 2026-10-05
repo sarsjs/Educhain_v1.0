@@ -41,6 +41,7 @@ import { Logo } from '@/components/icons';
 import { Button } from '../ui/button';
 import { useAuth } from '@/context/auth-context';
 import { ModeToggle } from '../mode-toggle';
+import { SchoolPresenceMonitor } from './school-presence-monitor';
 
 const navItems = {
   admin: [
@@ -54,7 +55,7 @@ const navItems = {
     { href: '/dashboard/director/estructura', icon: School, label: 'Estructura' },
     { href: '/dashboard/director/integridad', icon: ShieldCheck, label: 'Integridad' },
     { href: '/dashboard/director/calendario', icon: Calendar, label: 'Calendario' },
-    { href: '/dashboard/director/horarios', icon: Calendar, label: 'Horarios' },
+    { href: '/dashboard/director/planeacion', icon: Calendar, label: 'Planeación académica' },
     { href: '/dashboard/director/bitacora', icon: Clock, label: 'Bitácora' },
     { href: '/dashboard/director/mensajes', icon: MessageSquare, label: 'Mensajes' },
   ],
@@ -63,7 +64,7 @@ const navItems = {
     { href: '/dashboard/orientador/grupo', icon: ClipboardList, label: 'Grupos' },
     { href: '/dashboard/orientador/alumnos', icon: GraduationCap, label: 'Alumnos' },
     { href: '/dashboard/orientador/calendario', icon: Calendar, label: 'Calendario' },
-    { href: '/dashboard/orientador/horarios', icon: Calendar, label: 'Horarios' },
+    { href: '/dashboard/orientador/planeacion', icon: Calendar, label: 'Planeación académica' },
     { href: '/dashboard/orientador/materias', icon: BookCopy, label: 'Materias' },
     { href: '/dashboard/orientador/mensajes', icon: MessageSquare, label: 'Mensajes' },
   ],
@@ -234,6 +235,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <SidebarProvider defaultOpen>
+      <SchoolPresenceMonitor />
       <div className="flex h-screen w-full">
         <AppSidebar user={profile} />
         <SidebarInset className="flex min-w-0 flex-1 flex-col">

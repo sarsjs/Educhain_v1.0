@@ -5,10 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
-import { fetchMessages, deleteMessage } from '@/lib/firebase/data';
+import { fetchMessagesForUser, deleteMessage } from '@/lib/firebase/data';
 import { Trash2 } from 'lucide-react';
 import type { Message } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/context/auth-context';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import Link from 'next/link';
@@ -69,12 +70,13 @@ export function NotificationPanel({ className, integrityAlerts = [] }: Notificat
   const [messages, setMessages] = React.useState<Message[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const { toast } = useToast();
+  const { profile } = useAuth();
 
   React.useEffect(() => {
     const loadMessages = async () => {
       try {
         setIsLoading(true);
-        const fetchedMessages = await fetchMessages();
+        const fetchedMessages = profile?.id ? await fetchMessagesForUser(profile.id, profile.role) : [];
         setMessages(fetchedMessages);
       } catch (error) {
         console.error('Error loading messages', error);
@@ -89,7 +91,7 @@ export function NotificationPanel({ className, integrityAlerts = [] }: Notificat
     };
 
     loadMessages();
-  }, [toast]);
+  }, [toast, profile?.id, profile?.role]);
 
   const handleDeleteMessage = async (id: string) => {
     try {

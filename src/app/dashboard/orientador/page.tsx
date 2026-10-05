@@ -27,6 +27,7 @@ import { Button } from '@/components/ui/button';
 import { SubstitutionManager } from '@/components/dashboard/substitution-manager';
 import { GPSMonitor } from '@/components/dashboard/gps-monitor';
 import { WorkAttendanceTable } from '@/components/dashboard/work-attendance-table';
+import { AttendanceAppealsPanel } from '@/components/dashboard/attendance-appeals-panel';
 
 export default function OrientadorPage() {
   const { profile: user } = useAuth();
@@ -147,6 +148,7 @@ export default function OrientadorPage() {
         <div className="space-y-6">
           <WorkAttendanceTable userId={user?.id} title="Mi Asistencia" />
           <SubstitutionManager myGroups={groups} onUpdate={loadCounselorDashboard} />
+          <AttendanceAppealsPanel mode="counselor" userId={user?.id} />
           <NotificationPanel />
         </div>
       </div>

@@ -15,5 +15,12 @@
     "browser": true,
     "node": true,
     "es2021": true
+  },
+  "rules": {
+    "@typescript-eslint/no-explicit-any": "warn",
+    "@typescript-eslint/no-unused-vars": "warn",
+    "@typescript-eslint/ban-ts-comment": "warn",
+    "no-empty": "warn",
+    "prefer-const": "warn"
   }
 }

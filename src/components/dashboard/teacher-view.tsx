@@ -1,56 +1,58 @@
-'use client';
+"use client";
 
-import * as React from 'react';
+import * as React from "react";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
+} from "@/components/ui/card";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/context/auth-context";
+import { IdCard } from "@/components/dashboard/id-card";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import {
-  fetchSubjects,
-  fetchStudents,
-  fetchUsers,
-  fetchGroups,
+  fetchStudentsByGroup,
+  fetchGroupById,
+  fetchTimetableBySubject,
+  fetchTimetableByTeacher,
+  fetchSubjectsByIds,
   fetchAttendanceForDate,
-  setAttendanceBatch,
-  setGradeBatch,
-  fetchGradesByStudent,
   generateAttendanceToken,
-} from '@/lib/firebase/data';
-import { useToast } from '@/hooks/use-toast';
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@/components/ui/accordion';
-import { Checkbox } from '../ui/checkbox';
-import { Input } from '../ui/input';
-import { Button } from '../ui/button';
-import { useAuth } from '@/context/auth-context';
-import { IdCard } from '@/components/dashboard/id-card';
-import { StatCard } from '@/components/dashboard/stat-card';
-import {
-  KeyRound,
-  Timer,
-  ShieldCheck,
-  Users,
-  BookOpen,
-  BarChart3,
-  Calendar as CalendarIcon
-} from 'lucide-react';
-import type { Subject, Student, Group } from '@/lib/types';
+} from "@/lib/firebase/data";
+import { KeyRound, Timer, Users, BookOpen, CalendarDays, CheckCircle, XCircle } from "lucide-react";
+import type { Attendance, Group, Student, Subject, TimetableEntry } from "@/lib/types";
+
+const getLocalDate = () => {
+  const now = new Date();
+  return (
+    now.getFullYear() +
+    "-" +
+    String(now.getMonth() + 1).padStart(2, "0") +
+    "-" +
+    String(now.getDate()).padStart(2, "0")
+  );
+};
+
+const getCurrentDay = (): TimetableEntry["day"] | null => {
+  const day = new Date().getDay();
+  return day >= 1 && day <= 5 ? (["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"] as const)[day - 1] : null;
+};
+
+const isCurrentTimetableEntry = (entry: TimetableEntry) => {
+  const day = getCurrentDay();
+  if (entry.day !== day) return false;
+  const match = entry.time.match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
+  if (!match) return false;
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const start = Number(match[1]) * 60 + Number(match[2]);
+  const end = Number(match[3]) * 60 + Number(match[4]);
+  return currentMinutes >= start && currentMinutes < end;
+};
 
 export function TeacherView() {
   const { toast } = useToast();
@@ -59,144 +61,147 @@ export function TeacherView() {
   const [subjects, setSubjects] = React.useState<Subject[]>([]);
   const [students, setStudents] = React.useState<Student[]>([]);
   const [groups, setGroups] = React.useState<Group[]>([]);
+  const [timetables, setTimetables] = React.useState<TimetableEntry[]>([]);
+  const [attendance, setAttendance] = React.useState<Attendance[]>([]);
   const [loading, setLoading] = React.useState(true);
 
-  const [attendanceState, setAttendanceState] = React.useState<{ [key: string]: boolean }>({});
-  const [gradesState, setGradesState] = React.useState<{ [key: string]: number | '' }>({});
-  const [activeToken, setActiveToken] = React.useState<{ code: string; expiresAt: number } | null>(null);
+  const [activeToken, setActiveToken] = React.useState<{
+    code: string;
+    expiresAt: number;
+    subjectId: string;
+    groupId: string;
+    timetableId: string;
+  } | null>(null);
   const [countdown, setCountdown] = React.useState(0);
 
-  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-
+  const today = getLocalDate();
 
   const loadData = React.useCallback(async () => {
-    if (!profile) return;
+    if (!profile?.id) return;
+
+    setLoading(true);
     try {
-      const [subjectsData, studentsData, groupsData, attendanceData] = await Promise.all([
-        fetchSubjects(),
-        fetchStudents(),
-        fetchGroups(),
+      const [teacherTimetables, todayAttendance] = await Promise.all([
+        fetchTimetableByTeacher(profile.id),
         fetchAttendanceForDate(today),
       ]);
+      const teacherSubjects = await fetchSubjectsByIds(
+        [...new Set(teacherTimetables.map((entry) => entry.subjectId))]
+      );
+      const groupIds = [...new Set(teacherTimetables.map((entry) => entry.groupId))];
 
-      const teacherSubjects = subjectsData.filter(s => s.teacherId === profile.id);
+      const [groupResults, studentResults] = await Promise.all([
+        Promise.all(groupIds.map((groupId) => fetchGroupById(groupId))),
+        Promise.all(groupIds.map((groupId) => fetchStudentsByGroup(groupId))),
+      ]);
+
       setSubjects(teacherSubjects);
-      setStudents(studentsData);
-      setGroups(groupsData);
-
-      const initialAttendance: { [key: string]: boolean } = {};
-      studentsData.forEach(s => {
-        const record = attendanceData.find(a => a.studentId === s.id);
-        initialAttendance[s.id] = record?.present ?? true;
-      });
-      setAttendanceState(initialAttendance);
-
-      const initialGrades: { [key: string]: number | '' } = {};
-      studentsData.forEach(s => {
-        teacherSubjects.forEach(subj => {
-          const gradeObj = s.grades.find(g => g.subjectId === subj.id);
-          initialGrades[`${s.id}-${subj.id}`] = gradeObj?.grade ?? '';
-        });
-      });
-      setGradesState(initialGrades);
-
+      setStudents(studentResults.flat());
+      setGroups(groupResults.filter((group): group is Group => group !== null));
+      setTimetables(teacherTimetables);
+      setAttendance(todayAttendance);
     } catch (error) {
-      console.error('Failed to load teacher data', error);
-      toast({ title: 'Error', description: 'No se pudieron cargar los datos.' });
+      console.error("Failed to load teacher data:", error);
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar los datos del profesor.",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
-  }, [profile, toast, today]);
+  }, [profile?.id, toast, today]);
 
   React.useEffect(() => {
     loadData();
   }, [loadData]);
 
-  const handleAttendanceChange = (studentId: string, value: boolean) => {
-    setAttendanceState({ ...attendanceState, [studentId]: value });
-  };
+  React.useEffect(() => {
+    if (!activeToken) return;
 
-  const handleGradeChange = (studentId: string, subjectId: string, value: string) => {
-    const parsed = value === '' ? '' : Number(value);
-    if (parsed !== '' && (isNaN(parsed) || parsed < 0 || parsed > 100)) return;
-    setGradesState({ ...gradesState, [`${studentId}-${subjectId}`]: parsed });
-  };
+    const updateCountdown = () => {
+      const remaining = Math.max(0, Math.ceil((activeToken.expiresAt - Date.now()) / 1000));
+      setCountdown(remaining);
+      if (remaining <= 0) {
+        setActiveToken(null);
+      }
+    };
 
-  const handleStartAttendance = async (subjectId: string, groupId: string) => {
+    updateCountdown();
+    const timer = window.setInterval(updateCountdown, 1000);
+    return () => window.clearInterval(timer);
+  }, [activeToken]);
+
+  const handleStartAttendance = async (subjectId: string, groupId: string, timetableId: string) => {
     try {
-      const token = await generateAttendanceToken(subjectId, groupId);
-      setActiveToken({ code: token.code, expiresAt: Date.now() + 5 * 60 * 1000 });
-      setCountdown(300); // 5 minutes
+      if (!navigator.geolocation) {
+        throw new Error("Geolocalización no disponible");
+      }
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 0,
+        });
+      });
+      const { verifyUserLocation } = await import("@/lib/gps-utils");
+      const gpsResult = await verifyUserLocation(position);
+      if (!gpsResult.isInside || gpsResult.isMocked) {
+        throw new Error("El profesor debe estar dentro del plantel para iniciar el pase de lista.");
+      }
+      const token = await generateAttendanceToken(subjectId, groupId, timetableId, {
+        teacherLocation: {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+        },
+      });
+      const expiresAt = Date.now() + 5 * 60 * 1000;
+
+      setActiveToken({
+        code: token.code,
+        expiresAt,
+        subjectId,
+        groupId,
+        timetableId,
+      });
+      setCountdown(300);
+
       toast({
         title: "Pase de lista iniciado",
-        description: "Los alumnos tienen 5 minutos para ingresar el código."
+        description: "Comparte el código con los alumnos. Es válido durante 5 minutos.",
       });
     } catch (error) {
-      toast({ title: "Error", description: "No se pudo generar el código.", variant: "destructive" });
+      console.error("Error generating attendance token:", error);
+      toast({
+        title: "No se pudo generar el código",
+        description: "Verifica que la materia esté correctamente asignada al profesor.",
+        variant: "destructive",
+      });
     }
   };
 
-  React.useEffect(() => {
-    if (countdown <= 0) {
-      if (activeToken) setActiveToken(null);
-      return;
-    }
-    const timer = setInterval(() => setCountdown(c => c - 1), 1000);
-    return () => clearInterval(timer);
-  }, [countdown, activeToken]);
+  const attendanceFor = (groupId: string, studentId: string, subjectId: string, timetableId?: string) =>
+    attendance.some(
+      (record) =>
+        record.groupId === groupId &&
+        record.studentId === studentId &&
+        record.subjectId === subjectId &&
+        (!timetableId || record.timetableId === timetableId) &&
+        record.present === true
+    );
 
-  const handleSaveChanges = async () => {
-    try {
-      const attendanceRecords = Object.entries(attendanceState).map(([studentId, present]) => ({ studentId, date: today, present }));
-      await setAttendanceBatch(attendanceRecords);
-
-      // Prepare grade records for batch update
-      const gradeRecords = [];
-      for (const key in gradesState) {
-        const [studentId, subjectId] = key.split('-');
-        const gradeValue = gradesState[key];
-
-        // Find the group for this student
-        const student = students.find(s => s.id === studentId);
-        if (student && student.groupId) {
-          if (gradeValue !== '' && gradeValue !== null) {
-            // Determine which partial (1, 2, or 3) this corresponds to
-            // For now, we'll assume it's the current partial - in a real app, this would be more dynamic
-            const partial = 1; // Should be determined based on current date or academic calendar
-            gradeRecords.push({
-              studentId,
-              subjectId,
-              grade: Number(gradeValue),
-              partial: partial as 1 | 2 | 3,
-              groupId: student.groupId
-            });
-          }
-        }
-      }
-
-      if (gradeRecords.length > 0) {
-        await setGradeBatch(gradeRecords);
-      }
-
-      toast({ title: 'Cambios guardados', description: 'La asistencia y calificaciones han sido registradas.' });
-      loadData(); // Refresh data
-    } catch (error) {
-      console.error('Failed to save changes', error);
-      toast({ title: 'Error', description: 'No se pudieron guardar los cambios.' });
-    }
-  };
-
-  const getStudentsForGroup = (groupId: string) => {
-    return students.filter((s) => s.groupId === groupId);
-  };
+  const getGroupIdsForSubject = (subjectId: string) =>
+    [...new Set(
+      timetables
+        .filter((entry) => entry.subjectId === subjectId && (!entry.teacherId || entry.teacherId === profile?.id))
+        .map((entry) => entry.groupId)
+    )];
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="animate-pulse flex flex-col items-center gap-4">
-          <div className="h-12 w-12 bg-primary/20 rounded-full" />
-          <p className="text-sm font-medium text-muted-foreground tracking-widest uppercase">Cargando Panel Docente...</p>
-        </div>
+        <p className="text-sm text-muted-foreground">Cargando panel docente...</p>
       </div>
     );
   }
@@ -205,45 +210,45 @@ export function TeacherView() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-black tracking-tighter text-foreground">App del Profesor </h1>
-          <p className="text-muted-foreground font-medium">Gestión Académica y Pase de Lista Digital</p>
+          <h1 className="text-3xl font-black tracking-tight">Panel del Profesor</h1>
+          <p className="text-muted-foreground font-medium">
+            Horarios y pase de lista digital
+          </p>
         </div>
-        <div className="px-4 py-2 bg-primary/10 rounded-full border border-primary/20">
-          <span className="text-xs font-black uppercase text-primary">Ciclo Escolar 2024-2025</span>
-        </div>
+        <Badge variant="outline" className="w-fit">
+          <CalendarDays className="h-3 w-3 mr-1" />
+          {today}
+        </Badge>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Tus Materias"
-          value={subjects.length.toString()}
-          icon={BookOpen}
-          description="Carga académica actual"
-        />
-        <StatCard
-          title="Total Alumnos"
-          value={students.filter(s => subjects.some(subj => s.grades.some(g => g.subjectId === subj.id))).length.toString()}
-          icon={Users}
-          description="Alumnos bajo tu cargo"
-        />
-        <StatCard
-          title="Clases de Hoy"
-          value={subjects.length > 0 ? "2" : "0"} // Mock de ejemplo
-          icon={CalendarIcon}
-          description="Programadas para hoy"
-        />
-        <StatCard
-          title="Rendimiento"
-          value="8.4"
-          icon={BarChart3}
-          description="Promedio grupal"
-        />
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardContent className="pt-6 flex items-center gap-4">
+            <BookOpen className="h-8 w-8 text-primary" />
+            <div>
+              <p className="text-2xl font-black">{subjects.length}</p>
+              <p className="text-sm text-muted-foreground">Materias asignadas</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6 flex items-center gap-4">
+            <Users className="h-8 w-8 text-primary" />
+            <div>
+              <p className="text-2xl font-black">
+                {new Set(timetables.map((entry) => entry.groupId)).size}
+              </p>
+              <p className="text-sm text-muted-foreground">Grupos con horario</p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
+
       {profile && (
         <Card>
           <CardHeader>
             <CardTitle>Identificación digital</CardTitle>
-            <CardDescription>Descarga tu credencial oficial.</CardDescription>
+            <CardDescription>Credencial del profesor.</CardDescription>
           </CardHeader>
           <CardContent>
             <IdCard
@@ -256,138 +261,151 @@ export function TeacherView() {
           </CardContent>
         </Card>
       )}
-      <Card>
-        <CardHeader>
-          <CardTitle>Mis Clases</CardTitle>
-          <CardDescription>Gestiona la asistencia y calificaciones de tus clases asignadas.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Accordion type="single" collapsible className="w-full">
-            {subjects.map(subject => {
-              const associatedGroupIds = [...new Set(students.filter(s => s.grades.some(g => g.subjectId === subject.id)).map(s => s.groupId))];
-              const groupsForSubject = groups.filter(g => associatedGroupIds.includes(g.id));
 
-              return groupsForSubject.map(group => {
-                const studentsInGroup = getStudentsForGroup(group.id);
-                return (
-                  <AccordionItem key={`${subject.id}-${group.id}`} value={`${subject.id}-${group.id}`}>
-                    <AccordionTrigger className="text-lg font-semibold">{subject.name} - {group.name}</AccordionTrigger>
-                    <AccordionContent className="space-y-6">
-                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                          <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 bg-primary/10 rounded-full flex items-center justify-center text-primary">
-                              <ShieldCheck className="h-6 w-6" />
-                            </div>
+      <div className="space-y-4">
+        {subjects.length === 0 ? (
+          <Card>
+            <CardContent className="py-8 text-center text-sm text-muted-foreground">
+              No tienes materias asignadas.
+            </CardContent>
+          </Card>
+        ) : (
+          subjects.map((subject) => {
+            const groupIds = getGroupIdsForSubject(subject.id);
+
+            return (
+              <Card key={subject.id}>
+                <CardHeader>
+                  <CardTitle>{subject.name}</CardTitle>
+                  <CardDescription>
+                    Grupos y pase de lista de esta materia.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  {groupIds.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Esta materia no tiene grupos en el horario.
+                    </p>
+                  ) : (
+                    groupIds.map((groupId) => {
+                      const group = groups.find((item) => item.id === groupId);
+                      const groupStudents = students.filter(
+                        (student) => student.groupId === groupId
+                      );
+                      const currentEntry = timetables.find(
+                        (entry) => entry.subjectId === subject.id &&
+                          entry.groupId === groupId &&
+                          (!entry.teacherId || entry.teacherId === profile?.id) &&
+                          isCurrentTimetableEntry(entry)
+                      );
+                      const isTokenActive =
+                        activeToken?.subjectId === subject.id &&
+                        activeToken.groupId === groupId &&
+                        activeToken.timetableId === currentEntry?.id;
+
+                      return (
+                        <div key={groupId} className="rounded-xl border p-4 space-y-4">
+                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                             <div>
-                              <h3 className="font-bold text-sm">Pase de Lista Seguro</h3>
-                              <p className="text-xs text-muted-foreground">Genera un código dinámico para validar la presencia física.</p>
+                              <h3 className="font-bold">
+                                {group?.name || "Grupo"}
+                              </h3>
+                              <p className="text-xs text-muted-foreground">
+                                {groupStudents.length} estudiantes
+                              </p>
                             </div>
-                          </div>
 
-                          {activeToken ? (
-                            <div className="flex items-center gap-4 bg-white px-4 py-2 rounded-lg border shadow-sm">
-                              <div className="flex flex-col items-center">
-                                <span className="text-[10px] uppercase font-bold text-muted-foreground">Código</span>
-                                <span className="text-2xl font-black tracking-widest text-primary">{activeToken.code}</span>
-                              </div>
-                              <div className="border-l pl-4 flex flex-col items-center">
-                                <span className="text-[10px] uppercase font-bold text-muted-foreground">Expira en</span>
-                                <div className="flex items-center gap-1 text-orange-600 font-bold">
-                                  <Timer className="h-4 w-4" />
-                                  <span>{Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}</span>
+                            {isTokenActive ? (
+                              <div className="flex items-center gap-4 rounded-lg bg-primary/5 border border-primary/20 px-4 py-3">
+                                <div>
+                                  <p className="text-[10px] uppercase font-bold text-muted-foreground">
+                                    Código
+                                  </p>
+                                  <p className="text-3xl font-black tracking-[0.25em] text-primary">
+                                    {activeToken.code}
+                                  </p>
+                                </div>
+                                <div className="border-l pl-4">
+                                  <p className="text-[10px] uppercase font-bold text-muted-foreground">
+                                    Expira
+                                  </p>
+                                  <p className="font-bold flex items-center gap-1">
+                                    <Timer className="h-4 w-4" />
+                                    {Math.floor(countdown / 60)}:
+                                    {String(countdown % 60).padStart(2, "0")}
+                                  </p>
                                 </div>
                               </div>
-                            </div>
-                          ) : (
-                            <Button
-                              onClick={() => handleStartAttendance(subject.id, group.id)}
-                              className="bg-primary hover:bg-primary/90"
-                            >
-                              <KeyRound className="mr-2 h-4 w-4" />
-                              Iniciar Pase de Lista
-                            </Button>
-                          )}
+                            ) : (
+                              <Button
+                                onClick={() => currentEntry && handleStartAttendance(subject.id, groupId, currentEntry.id)}
+                                disabled={!currentEntry}
+                              >
+                                <KeyRound className="h-4 w-4 mr-2" />
+                                {currentEntry ? "Iniciar pase de lista" : "Fuera de horario"}
+                              </Button>
+                            )}
+                          </div>
+
+                          <div className="space-y-2">
+                            {groupStudents.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">
+                                No hay estudiantes registrados en este grupo.
+                              </p>
+                            ) : (
+                              groupStudents.map((student) => {
+                                const present = attendanceFor(
+                                  groupId,
+                                  student.id,
+                                  subject.id,
+                                  currentEntry?.id
+                                );
+
+                                return (
+                                  <div
+                                    key={student.id}
+                                    className="flex items-center justify-between rounded-lg border px-3 py-2"
+                                  >
+                                    <div className="flex items-center gap-3 min-w-0">
+                                      <Avatar className="h-8 w-8">
+                                        <AvatarImage
+                                          src={student.avatarUrl}
+                                          alt={student.name}
+                                        />
+                                        <AvatarFallback>
+                                          {student.name.charAt(0)}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                      <span className="font-medium truncate">
+                                        {student.name}
+                                      </span>
+                                    </div>
+                                    {present ? (
+                                      <Badge>
+                                        <CheckCircle className="h-3 w-3 mr-1" />
+                                        Presente
+                                      </Badge>
+                                    ) : (
+                                      <Badge variant="outline">
+                                        <XCircle className="h-3 w-3 mr-1" />
+                                        Pendiente
+                                      </Badge>
+                                    )}
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
                         </div>
-                      </div>
-
-                      <div>
-                        <h3 className="font-semibold text-md mb-2">Asistencia - {new Date(today).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })}</h3>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead className="w-[80px]"></TableHead>
-                              <TableHead>Nombre del Estudiante</TableHead>
-                              <TableHead className="text-right">Presente</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {studentsInGroup.map((student) => {
-                              const isPresent = attendanceState[student.id];
-                              return (
-                                <TableRow key={student.id}>
-                                  <TableCell>
-                                    <Avatar className="h-8 w-8">
-                                      <AvatarImage src={student.avatarUrl} alt={student.name} />
-                                      <AvatarFallback>{student.name.charAt(0)}</AvatarFallback>
-                                    </Avatar>
-                                  </TableCell>
-                                  <TableCell>{student.name}</TableCell>
-                                  <TableCell className="text-right">
-                                    <Checkbox
-                                      checked={isPresent}
-                                      onCheckedChange={(checked) => handleAttendanceChange(student.id, Boolean(checked))}
-                                    />
-                                  </TableCell>
-                                </TableRow>
-                              );
-                            })}
-                          </TableBody>
-                        </Table>
-                      </div>
-
-                      <div>
-                        <h3 className="font-semibold text-md mb-2">Ingresar Calificaciones</h3>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Nombre del Estudiante</TableHead>
-                              <TableHead className="text-right w-[100px]">Calificación</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {studentsInGroup.map((student) => {
-                              const gradeKey = `${student.id}-${subject.id}`;
-                              const gradeValue = gradesState[gradeKey];
-                              return (
-                                <TableRow key={student.id}>
-                                  <TableCell>{student.name}</TableCell>
-                                  <TableCell className="text-right">
-                                    <Input
-                                      type="number"
-                                      value={gradeValue ?? ''}
-                                      onChange={(e) => handleGradeChange(student.id, subject.id, e.target.value)}
-                                      className="text-right"
-                                      placeholder="N/A"
-                                    />
-                                  </TableCell>
-                                </TableRow>
-                              );
-                            })}
-                          </TableBody>
-                        </Table>
-                      </div>
-                      <div className="text-right">
-                        <Button onClick={handleSaveChanges}>Guardar Cambios</Button>
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                )
-              })
-            })}
-          </Accordion>
-        </CardContent>
-      </Card>
+                      );
+                    })
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }

@@ -9,7 +9,6 @@ import {
   fetchStudentsByGroup,
   fetchAttendanceForDate,
   setAttendanceBatch,
-  generateAttendanceToken,
   logActivity
 } from '@/lib/firebase/data';
 import type { Subject, Group, Student, Attendance } from '@/lib/types';
@@ -21,63 +20,33 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { ShieldCheck, KeyRound, Timer } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
+import { AttendanceAppealsPanel } from '@/components/dashboard/attendance-appeals-panel';
+import { TeacherBleAttendance } from '@/components/dashboard/teacher-ble-attendance';
 
 function AttendanceSheet({ students, groupId, subjectId }: { students: Student[], groupId: string, subjectId: string }) {
   const { profile } = useAuth();
   const [attendance, setAttendance] = React.useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = React.useState(true);
   const [isSaving, setIsSaving] = React.useState(false);
-  const [activeToken, setActiveToken] = React.useState<{ code: string; expiresAt: number } | null>(null);
-  const [countdown, setCountdown] = React.useState(0);
   const { toast } = useToast();
+  const [evidenceAcknowledged, setEvidenceAcknowledged] = React.useState<Record<string, boolean>>({});
+  const [bleDetected, setBleDetected] = React.useState<Record<string, boolean>>({});
   const today = format(new Date(), 'yyyy-MM-dd');
-
-  const handleStartAttendance = async () => {
-    try {
-      const token = await generateAttendanceToken(subjectId, groupId);
-      setActiveToken({ code: token.code, expiresAt: Date.now() + 5 * 60 * 1000 });
-      setCountdown(300); // 5 minutes
-
-      // REGISTRO DE LOG
-      await logActivity({
-        action: 'ASISTENCIA_TOKEN',
-        details: `Se generó código de asistencia (${token.code}) para el grupo ${groupId}.`,
-        targetId: groupId,
-        targetType: 'group',
-        createdBy: profile?.id || 'system',
-        creatorName: profile?.name || 'Profesor',
-        creatorRole: 'profesor'
-      });
-
-      toast({
-        title: "Pase de lista iniciado",
-        description: "Los alumnos tienen 5 minutos para ingresar el código."
-      });
-    } catch (error) {
-      toast({ title: "Error", description: "No se pudo generar el código.", variant: "destructive" });
-    }
-  };
-
-  React.useEffect(() => {
-    if (countdown <= 0) {
-      if (activeToken) setActiveToken(null);
-      return;
-    }
-    const timer = setInterval(() => setCountdown(c => c - 1), 1000);
-    return () => clearInterval(timer);
-  }, [countdown, activeToken]);
 
   React.useEffect(() => {
     const loadAttendance = async () => {
       setIsLoading(true);
       const existingRecords = await fetchAttendanceForDate(today);
       const attendanceMap: Record<string, boolean> = {};
+      const acknowledgedMap: Record<string, boolean> = {};
       students.forEach(student => {
         const record = existingRecords.find(r => r.studentId === student.id);
         attendanceMap[student.id] = record ? record.present : true; // Default to present
+        acknowledgedMap[student.id] = Boolean(record?.teacherEvidenceAcknowledged);
       });
       setAttendance(attendanceMap);
+      setEvidenceAcknowledged(acknowledgedMap);
       setIsLoading(false);
     };
 
@@ -86,13 +55,19 @@ function AttendanceSheet({ students, groupId, subjectId }: { students: Student[]
 
   const handleSave = async () => {
     setIsSaving(true);
-    const records: Omit<Attendance, "id">[] = Object.entries(attendance).map(([studentId, present]) => ({
-      studentId,
-      present,
-      date: today,
-      groupId,
-      subjectId,
-    }));
+    const records: Omit<Attendance, "id">[] = Object.entries(attendance).map(([studentId, present]) => {
+      const student = students.find(s => s.id === studentId);
+      const outside = student?.gpsStatus === 'outside';
+      return {
+        studentId, present, date: today, groupId, subjectId,
+        source: 'teacher', recordedBy: profile?.id || undefined, recordedByRole: 'profesor',
+        presenceEvidence: bleDetected[studentId] ? 'detected' : (outside ? 'not_detected' : 'not_checked'),
+        gpsStatusAtCheck: student?.gpsStatus || 'unknown',
+        teacherEvidenceWarning: outside,
+        teacherEvidenceAcknowledged: outside ? Boolean(evidenceAcknowledged[studentId]) : false,
+        teacherEvidenceAcknowledgedBy: outside && evidenceAcknowledged[studentId] ? profile?.id : undefined,
+      };
+    });
 
     try {
       await setAttendanceBatch(records);
@@ -129,59 +104,35 @@ function AttendanceSheet({ students, groupId, subjectId }: { students: Student[]
         <CardDescription>Marque a los alumnos ausentes. La lista es para el día de hoy: {format(new Date(), "d 'de' MMMM, yyyy", { locale: es })}.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Generador de Token */}
-        <div className="bg-muted/30 p-5 rounded-2xl border border-border shadow-inner">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-            <div className="flex items-center gap-4">
-              <div className="h-12 w-12 bg-primary/10 rounded-full flex items-center justify-center text-primary shadow-sm">
-                <ShieldCheck className="h-7 w-7" />
-              </div>
-              <div>
-                <h3 className="font-black text-sm uppercase tracking-tight">Token de Validación</h3>
-                <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Seguridad Dinámica</p>
-              </div>
-            </div>
+        <TeacherBleAttendance students={students} onDetectedStudent={(studentId) => {
+          setBleDetected(prev => ({ ...prev, [studentId]: true }));
+          setAttendance(prev => ({ ...prev, [studentId]: true }));
+        }} />
 
-            {activeToken ? (
-              <div className="flex items-center gap-6 bg-card px-6 py-3 rounded-2xl border border-border shadow-lg animate-in zoom-in-95 duration-300">
-                <div className="flex flex-col items-center">
-                  <span className="text-[10px] uppercase font-black text-muted-foreground tracking-widest mb-1">Código</span>
-                  <span className="text-3xl font-black tracking-[0.3em] text-primary drop-shadow-sm">{activeToken.code}</span>
-                </div>
-                <div className="h-10 w-px bg-border mx-2" />
-                <div className="flex flex-col items-center">
-                  <span className="text-[10px] uppercase font-black text-muted-foreground tracking-widest mb-1">Expira</span>
-                  <div className="flex items-center gap-2 text-amber-600 font-black">
-                    <Timer className="h-5 w-5 animate-pulse" />
-                    <span className="text-xl tabular-nums">{Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}</span>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <Button
-                onClick={handleStartAttendance}
-                className="bg-primary hover:bg-primary/90 text-[10px] uppercase font-black tracking-widest px-8 h-12 rounded-xl shadow-lg shadow-primary/20 transition-all active:scale-95"
-              >
-                <KeyRound className="mr-2 h-4 w-4" />
-                Iniciar Fase Digital
-              </Button>
-            )}
-          </div>
+        <div className="rounded-2xl border bg-muted/30 p-4">
+          <p className="text-sm font-semibold">Verificación de presencia</p>
+          <p className="text-xs text-muted-foreground mt-1">EduChain avisará cuando el sistema reporte a un alumno fuera del plantel. El profesor puede continuar, pero la decisión quedará registrada para auditoría.</p>
         </div>
 
         <Table>
-          <TableHeader><TableRow><TableHead>Alumno</TableHead><TableHead className="text-right">Presente</TableHead></TableRow></TableHeader>
+          <TableHeader><TableRow><TableHead>Alumno</TableHead><TableHead>Estado del sistema</TableHead><TableHead className="text-right">Presente</TableHead></TableRow></TableHeader>
           <TableBody>
             {students.map(student => (
               <TableRow key={student.id}>
                 <TableCell>{student.name}</TableCell>
+                <TableCell>
+                  {student.gpsStatus === 'outside' ? <div className="flex items-center gap-2 text-amber-700 text-xs font-semibold"><AlertTriangle className="h-4 w-4" />Fuera del plantel</div> : student.gpsStatus === 'inside' ? <span className="text-xs text-green-700 font-semibold">Detectado en plantel</span> : <span className="text-xs text-muted-foreground">Sin verificación</span>}
+                </TableCell>
                 <TableCell className="text-right">
-                  <Checkbox
-                    checked={attendance[student.id] || false}
-                    onCheckedChange={(checked) => {
-                      setAttendance(prev => ({ ...prev, [student.id]: Boolean(checked) }))
-                    }}
-                  />
+                  <Checkbox checked={attendance[student.id] || false} onCheckedChange={(checked) => {
+                    const next = Boolean(checked);
+                    if (next && student.gpsStatus === 'outside') {
+                      const accepted = window.confirm('ADVERTENCIA DE EDUCHAIN\\n\\nEl sistema detectó a este alumno FUERA DEL PLANTEL.\\n\\n¿Está seguro de marcarlo como PRESENTE?\\n\\nSi continúa, quedará registrado que recibió esta advertencia y aun así confirmó la asistencia.');
+                      if (!accepted) return;
+                      setEvidenceAcknowledged(prev => ({ ...prev, [student.id]: true }));
+                    } else if (!next) setEvidenceAcknowledged(prev => ({ ...prev, [student.id]: false }));
+                    setAttendance(prev => ({ ...prev, [student.id]: next }));
+                  }} />
                 </TableCell>
               </TableRow>
             ))}
@@ -289,6 +240,8 @@ export default function AttendancePage() {
           </CardContent>
         </Card>
       )}
+
+      <AttendanceAppealsPanel mode="teacher" userId={user?.id} />
 
       {selectedGroup && students.length > 0 && (
         <AttendanceSheet students={students} groupId={selectedGroup} subjectId={subjectId} />

@@ -18,10 +18,11 @@ export function calculateDistance(lat1: number, lon1: number, lat2: number, lon2
 }
 
 export const SCHOOL_LOCATION = {
-    latitude: 19.4326, // Example coordinates
-    longitude: -99.1332,
-    radius: 150, // Perimeter in meters
-    name: "Plantel Educativo"
+    // EPO 264: coordenadas proporcionadas para el plantel.
+    latitude: 19.0801094,
+    longitude: -98.8468597,
+    radius: 150,
+    name: "EPO 264"
 };
 
 export interface LocationScanResult {
@@ -30,6 +31,31 @@ export interface LocationScanResult {
     isMocked: boolean;
     confidence: 'high' | 'medium' | 'low';
     error?: string;
+}
+
+/** Returns the distance in meters between two GPS coordinates. */
+export function calculateCoordinateDistance(
+    first: { latitude: number; longitude: number },
+    second: { latitude: number; longitude: number }
+): number {
+    return calculateDistance(first.latitude, first.longitude, second.latitude, second.longitude);
+}
+
+/**
+ * Validates that a student's GPS position is reasonably close to the teacher's
+ * position. GPS indoors is noisy, so this is intentionally a soft proximity
+ * check rather than an exact coordinate match.
+ */
+export function verifyProximityToTeacher(
+    studentPosition: GeolocationPosition,
+    teacherLocation: { latitude: number; longitude: number },
+    radius = 75
+): { isNear: boolean; distance: number } {
+    const distance = calculateCoordinateDistance(
+        { latitude: studentPosition.coords.latitude, longitude: studentPosition.coords.longitude },
+        teacherLocation
+    );
+    return { isNear: distance <= radius, distance };
 }
 
 /**
@@ -58,10 +84,12 @@ export async function verifyUserLocation(
     let isMocked = false;
     let confidence: 'high' | 'medium' | 'low' = 'high';
 
-    // 1. Suspicious precision (accuracy <= 1 is unrealistic on real devices)
-    if (accuracy <= 1) {
-        isMocked = true;
+    // 1. Accuracy is used only as a confidence signal. Very precise GPS is
+    //    possible on real devices and must not be rejected as simulated by itself.
+    if (accuracy > 100) {
         confidence = 'low';
+    } else if (accuracy > 30) {
+        confidence = 'medium';
     }
 
     // 2. Impossible speed (over ~120 km/h near the school)
