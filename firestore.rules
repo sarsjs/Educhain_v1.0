@@ -505,7 +505,11 @@ service cloud.firestore {
         request.resource.data.originalPresent == false &&
         request.resource.data.status == 'pending' &&
         get(/databases/$(database)/documents/attendance/$(request.resource.data.attendanceId)).data.studentId == request.auth.uid &&
-        get(/databases/$(database)/documents/attendance/$(request.resource.data.attendanceId)).data.present == false;
+        get(/databases/$(database)/documents/attendance/$(request.resource.data.attendanceId)).data.present == false &&
+        request.resource.data.groupId == get(/databases/$(database)/documents/attendance/$(request.resource.data.attendanceId)).data.groupId &&
+        request.resource.data.subjectId == get(/databases/$(database)/documents/attendance/$(request.resource.data.attendanceId)).data.subjectId &&
+        request.resource.data.teacherId == get(/databases/$(database)/documents/attendance/$(request.resource.data.attendanceId)).data.recordedBy &&
+        request.resource.data.counselorId == get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.counselorId;
       allow update: if request.auth != null && (
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'director' ||
         (
