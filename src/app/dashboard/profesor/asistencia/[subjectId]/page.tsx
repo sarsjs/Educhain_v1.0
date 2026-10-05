@@ -21,6 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { AlertTriangle } from 'lucide-react';
+import { AttendanceAppealsPanel } from '@/components/dashboard/attendance-appeals-panel';
 
 function AttendanceSheet({ students, groupId, subjectId }: { students: Student[], groupId: string, subjectId: string }) {
   const { profile } = useAuth();
@@ -232,6 +233,8 @@ export default function AttendancePage() {
           </CardContent>
         </Card>
       )}
+
+      <AttendanceAppealsPanel mode="teacher" userId={user?.id} />
 
       {selectedGroup && students.length > 0 && (
         <AttendanceSheet students={students} groupId={selectedGroup} subjectId={subjectId} />
