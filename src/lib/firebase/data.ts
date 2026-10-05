@@ -844,6 +844,64 @@ export const setAttendanceBatch = async (records: Omit<Attendance, "id">[]) => {
     await batch.commit();
 };
 
+/**
+ * Auditoría directiva del pase de lista.
+ * El director puede volver a pasar lista aunque el profesor ya haya guardado
+ * su registro. Si contradice una evidencia física negativa, se exige motivo
+ * y queda un rastro inmutable de quién hizo la corrección y cuándo.
+ */
+export const directorAuditAttendance = async (
+    records: Array<{
+        studentId: string;
+        date: string;
+        subjectId: string;
+        groupId: string;
+        timetableId?: string;
+        present: boolean;
+        presenceEvidence: Attendance['presenceEvidence'];
+        gpsDistanceMeters?: number;
+        gpsStatusAtCheck?: Attendance['gpsStatusAtCheck'];
+        overrideReason?: string;
+    }>,
+    directorId: string
+) => {
+    if (!directorId) throw new Error("Se requiere el director que realiza la auditoría.");
+
+    const batch = writeBatch(db);
+    for (const record of records) {
+        if (record.present && record.presenceEvidence === 'not_detected') {
+            if (!record.overrideReason?.trim()) {
+                throw new Error("Para marcar presente a un alumno no detectado se requiere justificar la excepción.");
+            }
+        }
+
+        const docId = `${record.studentId}_${record.date}_${record.subjectId}`;
+        const attendanceRef = doc(db, "attendance", docId);
+        batch.set(attendanceRef, {
+            ...record,
+            source: 'director_audit',
+            recordedBy: directorId,
+            recordedByRole: 'director',
+            directorOverride: record.present && record.presenceEvidence === 'not_detected',
+            directorOverrideReason: record.overrideReason?.trim() || null,
+            directorOverrideAt: serverTimestamp(),
+            directorOverrideBy: directorId,
+        }, { merge: true });
+    }
+    await batch.commit();
+
+    await addDoc(collection(db, "activity_logs"), {
+        action: 'AUDITORIA_DIRECTIVA_ASISTENCIA',
+        details: `El director realizó una segunda verificación del pase de lista de ${records.length} alumno(s).`,
+        targetId: records[0]?.groupId,
+        targetType: 'group',
+        createdBy: directorId,
+        creatorName: 'Director',
+        creatorRole: 'director',
+        timestamp: serverTimestamp(),
+    });
+};
+
 export const setGradeBatch = async (records: Omit<Grade, "id" | "createdAt">[]) => {
     const batch = writeBatch(db);
     for (const record of records) {
