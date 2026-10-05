@@ -99,6 +99,11 @@ export interface Attendance {
     directorOverrideReason?: string;
     directorOverrideAt?: FieldValue;
     directorOverrideBy?: string;
+    /** El profesor recibió la advertencia de evidencia negativa y decidió continuar. */
+    teacherEvidenceWarning?: boolean;
+    teacherEvidenceAcknowledged?: boolean;
+    teacherEvidenceAcknowledgedAt?: FieldValue;
+    teacherEvidenceAcknowledgedBy?: string;
 }
 
 export type RecipientFilter =
