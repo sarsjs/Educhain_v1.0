@@ -291,6 +291,8 @@ service cloud.firestore {
           request.resource.data.appealResolved == true &&
           request.resource.data.appealResolvedBy == request.auth.uid &&
           get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.counselorId == request.auth.uid &&
+          getAfter(/databases/$(database)/documents/attendance_appeals/$(request.resource.data.appealId)).data.status == 'resolved' &&
+          getAfter(/databases/$(database)/documents/attendance_appeals/$(request.resource.data.appealId)).data.counselorId == request.auth.uid &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['present','source','recordedBy','recordedByRole','appealId','appealResolved','appealResolvedAt','appealResolvedBy','appealResolutionReason'])))
     }
 
