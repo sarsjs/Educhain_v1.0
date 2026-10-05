@@ -550,7 +550,7 @@ export const confirmAttendanceAppeal = async (appealId:string, role:'profesor'|'
   const tc=role==='profesor'||Boolean(a.teacherConfirmedBy), oc=role==='orientador'||Boolean(a.counselorConfirmedBy), done=tc&&oc;
   const u:any=role==='profesor'?{teacherConfirmedBy:userId,teacherConfirmedAt:serverTimestamp()}:{counselorConfirmedBy:userId,counselorConfirmedAt:serverTimestamp()};
   u.status=done?'resolved':role==='profesor'?'teacher_confirmed':'counselor_confirmed';
-  if(done){u.resolution='present';u.resolvedBy=userId;u.resolvedAt=serverTimestamp();u.resolutionReason='Presencia confirmada físicamente por profesor y orientador; discrepancia tecnológica.';tx.update(doc(db,"attendance",a.attendanceId),{present:true,source:'counselor',recordedBy:userId,recordedByRole:'orientador',appealResolved:true,appealResolvedAt:serverTimestamp(),appealResolvedBy:userId,appealResolutionReason:u.resolutionReason});}
+  if(done){u.resolution='present';u.resolvedBy=userId;u.resolvedAt=serverTimestamp();u.resolutionReason='Presencia confirmada físicamente por profesor y orientador; discrepancia tecnológica.';tx.update(doc(db,"attendance",a.attendanceId),{present:true,source:'counselor',recordedBy:userId,recordedByRole:'orientador',appealId,appealResolved:true,appealResolvedAt:serverTimestamp(),appealResolvedBy:userId,appealResolutionReason:u.resolutionReason});}
   tx.update(ref,u);
  });
 };
