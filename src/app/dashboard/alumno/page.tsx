@@ -39,6 +39,7 @@ import { AchievementShowcase } from '@/components/dashboard/achievement-showcase
 import { toPng } from 'html-to-image';
 import { useToast } from '@/hooks/use-toast';
 import { AttendanceAppealsPanel } from '@/components/dashboard/attendance-appeals-panel';
+import { StudentBlePresence } from '@/components/dashboard/student-ble-presence';
 
 export default function AlumnoPage() {
   const { profile: user } = useAuth();
@@ -213,51 +214,8 @@ export default function AlumnoPage() {
         </Card>
       )}
 
-      {
-        student && config?.features.attendanceGps && (
-          <div className="space-y-6">
-            <Card className="bg-gradient-to-br from-primary/5 to-transparent border-primary/20 shadow-lg">
-              <CardHeader>
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-primary rounded-xl text-white shadow-lg shadow-primary/20">
-                    <ShieldCheck className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-xl font-black uppercase tracking-tight">CÓDIGO DE ASISTENCIA</CardTitle>
-                    <CardDescription className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Validación de Presencia en Clase</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex flex-col sm:flex-row items-center gap-4">
-                  <div className="relative flex-1 w-full">
-                    <KeyRound className="absolute left-4 top-3 h-5 w-5 text-muted-foreground" />
-                    <Input
-                      placeholder="0000"
-                      className="pl-12 h-12 text-2xl tracking-[0.6em] font-black uppercase text-center bg-background border-border focus:ring-primary/20"
-                      maxLength={4}
-                      value={validationCode}
-                      onChange={(e) => setValidationCode(e.target.value)}
-                    />
-                  </div>
-                  <Button
-                    className="h-12 px-10 w-full sm:w-auto font-black uppercase tracking-widest text-[10px] shadow-lg shadow-primary/20"
-                    onClick={handleVerifyAttendance}
-                    disabled={isVerifying || validationCode.length < 4}
-                  >
-                    {isVerifying ? "Verificando..." : "Validar Asistencia"}
-                  </Button>
-                </div>
-                <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-medium uppercase tracking-tight">
-                  <MapPin className="h-3 w-3 text-primary" />
-                  <span>Para validar, debes estar físicamente dentro del plantel.</span>
-                </div>
-              </CardContent>
-            </Card>
+      {student && <StudentBlePresence studentId={student.id} />}
 
-          </div>
-        )
-      }
 
       {
         isLoading ? (
