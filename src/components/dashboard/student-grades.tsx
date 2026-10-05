@@ -44,7 +44,7 @@ export function StudentGrades({ grades, subjects }: StudentGradesProps) {
         if (validGrades.length > 0) {
             const total = validGrades.reduce((acc, curr) => acc + curr, 0);
             item.average = parseFloat((total / validGrades.length).toFixed(1));
-        } 
+        }
     });
 
     return Object.values(summary);
@@ -59,27 +59,28 @@ export function StudentGrades({ grades, subjects }: StudentGradesProps) {
       <CardContent>
         <div className="w-full overflow-x-auto">
           <Table className="min-w-[560px]">
-          <TableHeader>
-            <TableRow>
-              <TableHead className="font-bold">Materia</TableHead>
-              <TableHead className="text-center">1er Parcial</TableHead>
-              <TableHead className="text-center">2do Parcial</TableHead>
-              <TableHead className="text-center">3er Parcial</TableHead>
-              <TableHead className="text-center font-bold">Promedio</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {gradeSummary.map(summaryItem => (
-              <TableRow key={summaryItem.subjectName}>
-                <TableCell className="font-medium">{summaryItem.subjectName}</TableCell>
-                <TableCell className="text-center">{summaryItem.partials[1] ?? '--'}</TableCell>
-                <TableCell className="text-center">{summaryItem.partials[2] ?? '--'}</TableCell>
-                <TableCell className="text-center">{summaryItem.partials[3] ?? '--'}</TableCell>
-                <TableCell className="text-center font-semibold">{summaryItem.average ?? 'N/A'}</TableCell>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="font-bold">Materia</TableHead>
+                <TableHead className="text-center">1er Parcial</TableHead>
+                <TableHead className="text-center">2do Parcial</TableHead>
+                <TableHead className="text-center">3er Parcial</TableHead>
+                <TableHead className="text-center font-bold">Promedio</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {gradeSummary.map(summaryItem => (
+                <TableRow key={summaryItem.subjectName}>
+                  <TableCell className="font-medium">{summaryItem.subjectName}</TableCell>
+                  <TableCell className="text-center">{summaryItem.partials[1] ?? '--'}</TableCell>
+                  <TableCell className="text-center">{summaryItem.partials[2] ?? '--'}</TableCell>
+                  <TableCell className="text-center">{summaryItem.partials[3] ?? '--'}</TableCell>
+                  <TableCell className="text-center font-semibold">{summaryItem.average ?? 'N/A'}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </CardContent>
     </Card>
   );
