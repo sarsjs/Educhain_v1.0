@@ -465,6 +465,27 @@ export const fetchMessages = async (): Promise<Message[]> => fetchData(async () 
     return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as Message));
 }, 'messages');
 
+export const fetchMessagesForUser = async (userId: string, role?: User['role']): Promise<Message[]> => {
+    const messages = await fetchMessages();
+    return messages.filter(message => {
+        if (message.recipientFilter === 'all' || message.recipientFilter === 'personal') return true;
+        if (message.recipientFilter === 'student') return message.recipientId === userId;
+        if (message.recipientFilter === 'specificTeacher') return message.recipientId === userId;
+        if (message.recipientFilter === 'specificCounselor') return message.recipientId === userId;
+        if (message.recipientFilter === 'director') return role === 'director';
+        if (message.recipientFilter === 'students') return role === 'estudiante' || role === 'alumno';
+        if (message.recipientFilter === 'teachers') return role === 'profesor';
+        if (message.recipientFilter === 'counselors') return role === 'orientador';
+        return false;
+    });
+};
+
+export const createSystemMessage = async (message: Omit<Message, 'id' | 'timestamp'> & { id?: string }) => {
+    const ref = message.id ? doc(db, 'messages', message.id) : doc(collection(db, 'messages'));
+    await setDoc(ref, { ...message, timestamp: serverTimestamp() }, { merge: true });
+    return ref;
+};
+
 // Chat messages (1:1)
 export const addChatMessage = async (message: Omit<ChatMessage, "id" | "createdAt">) => {
     return await addDoc(collection(db, "chat_messages"), {
@@ -879,6 +900,21 @@ export const setAttendanceBatch = async (records: Omit<Attendance, "id">[]) => {
         const docId = `${record.studentId}_${record.date}_${record.subjectId}`;
         const attendanceRef = doc(db, "attendance", docId);
         batch.set(attendanceRef, record, { merge: true });
+    }
+    for (const record of records) {
+        if (!record.present) {
+            const subjectName = record.subjectId;
+            const messageId = `attendance_absence_${record.studentId}_${record.date}_${record.subjectId}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+            await setDoc(doc(db, 'messages', messageId), {
+                content: `Falta registrada en ${subjectName}. Si estabas presente, puedes apelar desde tu panel de alumno.`,
+                recipientFilter: 'student',
+                recipientLabel: 'Aviso de asistencia',
+                recipientId: record.studentId,
+                createdBy: record.recordedBy,
+                createdByRole: record.recordedByRole,
+                timestamp: serverTimestamp()
+            }, { merge: true });
+        }
     }
     await batch.commit();
 };
