@@ -496,23 +496,33 @@ service cloud.firestore {
         resource.data.studentId == request.auth.uid ||
         resource.data.teacherId == request.auth.uid ||
         resource.data.counselorId == request.auth.uid ||
-        get(/databases/\$(database)/documents/users/\$(request.auth.uid)).data.role == 'director'
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'director'
       );
       allow create: if request.auth != null &&
         request.resource.data.studentId == request.auth.uid &&
         request.resource.data.originalPresent == false &&
         request.resource.data.status == 'pending' &&
-        get(/databases/\$(database)/documents/attendance/\$(request.resource.data.attendanceId)).data.studentId == request.auth.uid &&
-        get(/databases/\$(database)/documents/attendance/\$(request.resource.data.attendanceId)).data.present == false;
+        get(/databases/$(database)/documents/attendance/$(request.resource.data.attendanceId)).data.studentId == request.auth.uid &&
+        get(/databases/$(database)/documents/attendance/$(request.resource.data.attendanceId)).data.present == false;
       allow update: if request.auth != null && (
-        get(/databases/\$(database)/documents/users/\$(request.auth.uid)).data.role == 'director' ||
-        (request.auth.uid == resource.data.teacherId &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['teacherConfirmedBy','teacherConfirmedAt','status','counselorConfirmedBy','counselorConfirmedAt','resolution','resolvedBy','resolvedAt','resolutionReason'])) ||
-        (request.auth.uid == resource.data.counselorId &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['counselorConfirmedBy','counselorConfirmedAt','teacherConfirmedBy','teacherConfirmedAt','status','resolution','resolvedBy','resolvedAt','resolutionReason']))
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'director' ||
+        (
+          request.auth.uid == resource.data.teacherId &&
+          request.resource.data.teacherConfirmedBy == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['teacherConfirmedBy','teacherConfirmedAt','status','resolution','resolvedBy','resolvedAt','resolutionReason']) &&
+          (request.resource.data.status == 'teacher_confirmed' ||
+           (request.resource.data.status == 'resolved' && resource.data.counselorConfirmedBy != null && request.resource.data.resolution == 'present'))
+        ) ||
+        (
+          request.auth.uid == resource.data.counselorId &&
+          request.resource.data.counselorConfirmedBy == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['counselorConfirmedBy','counselorConfirmedAt','status','resolution','resolvedBy','resolvedAt','resolutionReason']) &&
+          (request.resource.data.status == 'counselor_confirmed' ||
+           (request.resource.data.status == 'resolved' && resource.data.teacherConfirmedBy != null && request.resource.data.resolution == 'present'))
+        )
       );
       allow delete: if request.auth != null &&
-        get(/databases/\$(database)/documents/users/\$(request.auth.uid)).data.role == 'director';
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'director';
     }
 
 }
