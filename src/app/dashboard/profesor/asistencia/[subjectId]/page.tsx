@@ -22,6 +22,7 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { AlertTriangle } from 'lucide-react';
 import { AttendanceAppealsPanel } from '@/components/dashboard/attendance-appeals-panel';
+import { TeacherBleAttendance } from '@/components/dashboard/teacher-ble-attendance';
 
 function AttendanceSheet({ students, groupId, subjectId }: { students: Student[], groupId: string, subjectId: string }) {
   const { profile } = useAuth();
@@ -30,6 +31,7 @@ function AttendanceSheet({ students, groupId, subjectId }: { students: Student[]
   const [isSaving, setIsSaving] = React.useState(false);
   const { toast } = useToast();
   const [evidenceAcknowledged, setEvidenceAcknowledged] = React.useState<Record<string, boolean>>({});
+  const [bleDetected, setBleDetected] = React.useState<Record<string, boolean>>({});
   const today = format(new Date(), 'yyyy-MM-dd');
 
   React.useEffect(() => {
@@ -59,7 +61,7 @@ function AttendanceSheet({ students, groupId, subjectId }: { students: Student[]
       return {
         studentId, present, date: today, groupId, subjectId,
         source: 'teacher', recordedBy: profile?.id || undefined, recordedByRole: 'profesor',
-        presenceEvidence: outside ? 'not_detected' : 'not_checked',
+        presenceEvidence: bleDetected[studentId] ? 'detected' : (outside ? 'not_detected' : 'not_checked'),
         gpsStatusAtCheck: student?.gpsStatus || 'unknown',
         teacherEvidenceWarning: outside,
         teacherEvidenceAcknowledged: outside ? Boolean(evidenceAcknowledged[studentId]) : false,
@@ -102,6 +104,11 @@ function AttendanceSheet({ students, groupId, subjectId }: { students: Student[]
         <CardDescription>Marque a los alumnos ausentes. La lista es para el día de hoy: {format(new Date(), "d 'de' MMMM, yyyy", { locale: es })}.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        <TeacherBleAttendance students={students} onDetectedStudent={(studentId) => {
+          setBleDetected(prev => ({ ...prev, [studentId]: true }));
+          setAttendance(prev => ({ ...prev, [studentId]: true }));
+        }} />
+
         <div className="rounded-2xl border bg-muted/30 p-4">
           <p className="text-sm font-semibold">Verificación de presencia</p>
           <p className="text-xs text-muted-foreground mt-1">EduChain avisará cuando el sistema reporte a un alumno fuera del plantel. El profesor puede continuar, pero la decisión quedará registrada para auditoría.</p>
