@@ -896,17 +896,15 @@ export const deleteEvent = async (eventId: string) => {
 
 export const setAttendanceBatch = async (records: Omit<Attendance, "id">[]) => {
     const batch = writeBatch(db);
+    const subjectSnapshot = await getDocs(collection(db, "subjects"));
+    const subjectNames = new Map(subjectSnapshot.docs.map(item => [item.id, String(item.data().name || 'tu materia')]));
     for (const record of records) {
         const docId = `${record.studentId}_${record.date}_${record.subjectId}`;
-        const attendanceRef = doc(db, "attendance", docId);
-        batch.set(attendanceRef, record, { merge: true });
-    }
-    for (const record of records) {
+        batch.set(doc(db, "attendance", docId), record, { merge: true });
         if (!record.present) {
-            const subjectName = record.subjectId;
             const messageId = `attendance_absence_${record.studentId}_${record.date}_${record.subjectId}`.replace(/[^a-zA-Z0-9_-]/g, '_');
-            await setDoc(doc(db, 'messages', messageId), {
-                content: `Falta registrada en ${subjectName}. Si estabas presente, puedes apelar desde tu panel de alumno.`,
+            batch.set(doc(db, 'messages', messageId), {
+                content: `Falta registrada en ${subjectNames.get(record.subjectId) || 'tu materia'}. Si estabas presente, puedes apelar desde tu panel de alumno.`,
                 recipientFilter: 'student',
                 recipientLabel: 'Aviso de asistencia',
                 recipientId: record.studentId,
