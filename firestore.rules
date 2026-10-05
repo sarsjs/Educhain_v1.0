@@ -486,4 +486,28 @@ service cloud.firestore {
       allow read, write: if false; // Default: no access
     }
   }
+    match /attendance_appeals/{appealId} {
+      allow read: if request.auth != null && (
+        resource.data.studentId == request.auth.uid ||
+        resource.data.teacherId == request.auth.uid ||
+        resource.data.counselorId == request.auth.uid ||
+        get(/databases/\$(database)/documents/users/\$(request.auth.uid)).data.role == 'director'
+      );
+      allow create: if request.auth != null &&
+        request.resource.data.studentId == request.auth.uid &&
+        request.resource.data.originalPresent == false &&
+        request.resource.data.status == 'pending' &&
+        get(/databases/\$(database)/documents/attendance/\$(request.resource.data.attendanceId)).data.studentId == request.auth.uid &&
+        get(/databases/\$(database)/documents/attendance/\$(request.resource.data.attendanceId)).data.present == false;
+      allow update: if request.auth != null && (
+        get(/databases/\$(database)/documents/users/\$(request.auth.uid)).data.role == 'director' ||
+        (request.auth.uid == resource.data.teacherId &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['teacherConfirmedBy','teacherConfirmedAt','status','counselorConfirmedBy','counselorConfirmedAt','resolution','resolvedBy','resolvedAt','resolutionReason'])) ||
+        (request.auth.uid == resource.data.counselorId &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['counselorConfirmedBy','counselorConfirmedAt','teacherConfirmedBy','teacherConfirmedAt','status','resolution','resolvedBy','resolvedAt','resolutionReason']))
+      );
+      allow delete: if request.auth != null &&
+        get(/databases/\$(database)/documents/users/\$(request.auth.uid)).data.role == 'director';
+    }
+
 }
