@@ -36,11 +36,14 @@ function AttendanceSheet({ students, groupId, subjectId }: { students: Student[]
       setIsLoading(true);
       const existingRecords = await fetchAttendanceForDate(today);
       const attendanceMap: Record<string, boolean> = {};
+      const acknowledgedMap: Record<string, boolean> = {};
       students.forEach(student => {
         const record = existingRecords.find(r => r.studentId === student.id);
         attendanceMap[student.id] = record ? record.present : true; // Default to present
+        acknowledgedMap[student.id] = Boolean(record?.teacherEvidenceAcknowledged);
       });
       setAttendance(attendanceMap);
+      setEvidenceAcknowledged(acknowledgedMap);
       setIsLoading(false);
     };
 
