@@ -77,6 +77,8 @@ export interface AcademicAssignment {
     updatedAt?: FieldValue;
 }
 
+export type AttendanceSource = 'teacher' | 'ble' | 'counselor' | 'director_audit';
+
 export interface Attendance {
     id: string;
     studentId: string;
@@ -85,6 +87,18 @@ export interface Attendance {
     subjectId: string;
     groupId: string;
     timetableId?: string;
+    source?: AttendanceSource;
+    recordedBy?: string;
+    recordedByRole?: UserRole;
+    /** Resultado de la comprobación física usada por BLE/GPS antes de confirmar. */
+    presenceEvidence?: 'detected' | 'not_detected' | 'not_checked';
+    gpsDistanceMeters?: number;
+    gpsStatusAtCheck?: 'inside' | 'outside' | 'coming' | 'unknown';
+    /** Se conserva cuando un director contradice la evidencia automática. */
+    directorOverride?: boolean;
+    directorOverrideReason?: string;
+    directorOverrideAt?: FieldValue;
+    directorOverrideBy?: string;
 }
 
 export type RecipientFilter =
