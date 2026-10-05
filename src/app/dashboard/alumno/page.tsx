@@ -10,14 +10,12 @@ import {
   fetchUsers,
   fetchUserById,
   fetchGroups,
-  verifyAttendanceToken,
   logActivity
 } from '@/lib/firebase/data';
 import type { Student, TimetableEntry, Subject, Grade, Group, User } from '@/lib/types';
 import { StudentSchedule } from '@/components/dashboard/student-schedule';
 import { StudentGrades } from '@/components/dashboard/student-grades';
 import { useAppConfig } from '@/context/config-context';
-import { verifyUserLocation } from '@/lib/gps-utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,6 +38,7 @@ import { StatCard } from '@/components/dashboard/stat-card';
 import { AchievementShowcase } from '@/components/dashboard/achievement-showcase';
 import { toPng } from 'html-to-image';
 import { useToast } from '@/hooks/use-toast';
+import { AttendanceAppealsPanel } from '@/components/dashboard/attendance-appeals-panel';
 
 export default function AlumnoPage() {
   const { profile: user } = useAuth();
@@ -52,65 +51,8 @@ export default function AlumnoPage() {
   const [tempCounselor, setTempCounselor] = React.useState<User | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
-  const [validationCode, setValidationCode] = React.useState("");
-  const [isVerifying, setIsVerifying] = React.useState(false);
   const { toast } = useToast();
 
-  const handleVerifyAttendance = async () => {
-    if (validationCode.length !== 4) {
-      toast({ title: "Código incompleto", description: "Debes ingresar los 4 dígitos." });
-      return;
-    }
-
-    setIsVerifying(true);
-    try {
-      // 1. Verificar GPS primero
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true });
-      });
-
-      const gpsResult = await verifyUserLocation(position, config?.geofence ? {
-        latitude: config.geofence.center.lat,
-        longitude: config.geofence.center.lng,
-        radius: config.geofence.radius
-      } : undefined);
-      if (!gpsResult.isInside) {
-        toast({
-          title: "Fuera de rango",
-          description: "Debes estar dentro del plantel para marcar asistencia.",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      // 2. Verificar Token Dinámico
-      const token = await verifyAttendanceToken(student?.groupId || "", validationCode);
-      if (token) {
-        // REGISTRO DE LOG
-        await logActivity({
-          action: 'ASISTENCIA_ALUMNO',
-          details: `El alumno validó su asistencia en el plantel mediante código GPS.`,
-          targetId: student?.id || 'unknown',
-          targetType: 'user',
-          createdBy: user?.id || 'system',
-          creatorName: user?.name || 'Alumno',
-          creatorRole: 'estudiante'
-        });
-
-        toast({ title: "Asistencia Confirmada", description: "¡Qué tengas una excelente clase!" });
-        setValidationCode("");
-        // Podríamos disparar un reload o actualizar el estado de asistencias si tuviéramos uno local
-      } else {
-        toast({ title: "Código inválido", description: "El código es incorrecto o ya expiró.", variant: "destructive" });
-      }
-
-    } catch (err) {
-      console.error("Verification error:", err);
-      toast({ title: "Error", description: "Permiso de GPS denegado o error de conexión.", variant: "destructive" });
-    } finally {
-      setIsVerifying(false);
-    }
-  };
   React.useEffect(() => {
     const loadStudentData = async () => {
       if (!user || !user.email) {
