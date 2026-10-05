@@ -1,8 +1,8 @@
-import { collection, getDocs, addDoc, doc, deleteDoc, query, where, updateDoc, writeBatch, orderBy, serverTimestamp, getDoc, deleteField, limit, onSnapshot, arrayUnion, setDoc, Timestamp } from "firebase/firestore";
+import { collection, getDocs, addDoc, doc, deleteDoc, query, where, updateDoc, writeBatch, orderBy, serverTimestamp, getDoc, deleteField, limit, onSnapshot, arrayUnion, setDoc, Timestamp, runTransaction } from "firebase/firestore";
 import { db, storage } from "./client";
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
-import type { User, Group, Subject, TimetableEntry, Attendance, Message, Grade, CalendarEvent, SubstitutionRequest, CounselorCoverage, CounselorClassTakeover, CounselorIncidentReport, WorkLog, ActivityLog, ChatMessage, SchoolPresenceCheck, AcademicAssignment } from "@/lib/types";
+import type { User, Group, Subject, TimetableEntry, Attendance, Message, Grade, CalendarEvent, SubstitutionRequest, CounselorCoverage, CounselorClassTakeover, CounselorIncidentReport, WorkLog, ActivityLog, ChatMessage, SchoolPresenceCheck, AcademicAssignment, AttendanceAppeal } from "@/lib/types";
 
 const fetchData = async <T>(fetchFunction: () => Promise<T[]>, entityName: string): Promise<T[]> => {
     try {
@@ -515,6 +515,45 @@ export const fetchAttendanceByStudent = async (studentId: string): Promise<Atten
         .map(doc => ({ id: doc.id, ...doc.data() } as unknown as Attendance))
         .sort((a, b) => b.date.localeCompare(a.date));
 }, 'attendance by student');
+
+export const fetchAttendanceAppealsForStudent = async (studentId: string): Promise<AttendanceAppeal[]> => fetchData(async () => {
+ const s=await getDocs(query(collection(db,"attendance_appeals"),where("studentId","==",studentId)));
+ return s.docs.map(d=>({id:d.id,...d.data()} as AttendanceAppeal));
+},'attendance appeals for student');
+export const fetchAttendanceAppealsForTeacher = async (teacherId: string): Promise<AttendanceAppeal[]> => fetchData(async () => {
+ const s=await getDocs(query(collection(db,"attendance_appeals"),where("teacherId","==",teacherId),where("status","in",['pending','counselor_confirmed'])));
+ return s.docs.map(d=>({id:d.id,...d.data()} as AttendanceAppeal));
+},'attendance appeals for teacher');
+export const fetchAttendanceAppealsForCounselor = async (counselorId: string): Promise<AttendanceAppeal[]> => fetchData(async () => {
+ const s=await getDocs(query(collection(db,"attendance_appeals"),where("counselorId","==",counselorId),where("status","in",['pending','teacher_confirmed'])));
+ return s.docs.map(d=>({id:d.id,...d.data()} as AttendanceAppeal));
+},'attendance appeals for counselor');
+export const createAttendanceAppeal = async (studentId:string, attendanceId:string, studentMessage?:string) => {
+ const ar=doc(db,"attendance",attendanceId), as=await getDoc(ar); if(!as.exists()) throw new Error("El registro de asistencia ya no existe.");
+ const a={id:as.id,...as.data()} as Attendance; if(a.studentId!==studentId||a.present) throw new Error("Solo puedes apelar una falta propia.");
+ const [gs,ss]=await Promise.all([getDoc(doc(db,"groups",a.groupId)),getDoc(doc(db,"subjects",a.subjectId))]);
+ if(!gs.exists()||!ss.exists()) throw new Error("No se pudo determinar responsables.");
+ const g=gs.data() as Group, s=ss.data() as Subject, teacherId=a.recordedByRole==='profesor'&&a.recordedBy?a.recordedBy:s.teacherId;
+ if(!teacherId||!g.counselorId) throw new Error("No fue posible determinar al profesor y orientador responsables.");
+ const ref=doc(db,"attendance_appeals",attendanceId+"_"+studentId), old=await getDoc(ref);
+ if(old.exists()&&['pending','teacher_confirmed','counselor_confirmed'].includes(String(old.data().status))) return ref;
+ await setDoc(ref,{attendanceId,studentId,teacherId,counselorId:g.counselorId,subjectId:a.subjectId,groupId:a.groupId,date:a.date,status:'pending',studentMessage:studentMessage?.trim()||'Estoy presente; solicito revisión de mi asistencia.',originalPresent:false,originalPresenceEvidence:a.presenceEvidence||'not_checked',originalGpsStatusAtCheck:a.gpsStatusAtCheck||'unknown',originalGpsDistanceMeters:a.gpsDistanceMeters,createdAt:serverTimestamp()});
+ return ref;
+};
+export const confirmAttendanceAppeal = async (appealId:string, role:'profesor'|'orientador', userId:string) => {
+ const ref=doc(db,"attendance_appeals",appealId);
+ await runTransaction(db,async tx=>{
+  const s=await tx.get(ref); if(!s.exists()) throw new Error("La apelación ya no existe.");
+  const a={id:s.id,...s.data()} as AttendanceAppeal;
+  if(role==='profesor'&&a.teacherId!==userId) throw new Error("No eres el profesor responsable.");
+  if(role==='orientador'&&a.counselorId!==userId) throw new Error("No eres el orientador responsable.");
+  const tc=role==='profesor'||Boolean(a.teacherConfirmedBy), oc=role==='orientador'||Boolean(a.counselorConfirmedBy), done=tc&&oc;
+  const u:any=role==='profesor'?{teacherConfirmedBy:userId,teacherConfirmedAt:serverTimestamp()}:{counselorConfirmedBy:userId,counselorConfirmedAt:serverTimestamp()};
+  u.status=done?'resolved':role==='profesor'?'teacher_confirmed':'counselor_confirmed';
+  if(done){u.resolution='present';u.resolvedBy=userId;u.resolvedAt=serverTimestamp();u.resolutionReason='Presencia confirmada físicamente por profesor y orientador; discrepancia tecnológica.';tx.update(doc(db,"attendance",a.attendanceId),{present:true,source:'counselor',recordedBy:userId,recordedByRole:'orientador',appealResolved:true,appealResolvedAt:serverTimestamp(),appealResolvedBy:userId,appealResolutionReason:u.resolutionReason});}
+  tx.update(ref,u);
+ });
+};
 
 export const fetchGradesBySubjectAndGroup = async (subjectId: string, groupId: string): Promise<Grade[]> => fetchData(async () => {
     const q = query(collection(db, "grades"), where("subjectId", "==", subjectId), where("groupId", "==", groupId));
