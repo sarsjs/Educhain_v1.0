@@ -33,7 +33,6 @@ import { StatCard } from '@/components/dashboard/stat-card';
 import { AchievementShowcase } from '@/components/dashboard/achievement-showcase';
 import { toPng } from 'html-to-image';
 import { useToast } from '@/hooks/use-toast';
-import { AttendanceAppealsPanel } from '@/components/dashboard/attendance-appeals-panel';
 import { StudentBlePresence } from '@/components/dashboard/student-ble-presence';
 
 export default function AlumnoPage() {
