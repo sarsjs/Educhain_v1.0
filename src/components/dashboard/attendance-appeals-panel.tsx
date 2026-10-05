@@ -114,6 +114,13 @@ export function AttendanceAppealsPanel({ mode, userId }: { mode: Mode; userId?: 
           );
         })}
         {mode === 'student' && absences.length === 0 && <p className="text-sm text-muted-foreground">No tienes faltas registradas para apelar.</p>}
+        {mode === 'student' && appeals.filter(a => a.status === 'resolved').map(appeal => (
+          <div key={`resolved-${appeal.id}`} className="rounded-xl border border-green-200 bg-green-50/50 p-4">
+            <p className="font-semibold text-green-800">Asistencia corregida en {subjectName(appeal.subjectId)}</p>
+            <p className="text-xs text-muted-foreground">{appeal.date} · Profesor y orientador confirmaron presencia física.</p>
+          </div>
+        ))}
+
         {mode !== 'student' && appeals.map(appeal => (
           <div key={appeal.id} className="rounded-xl border p-4 space-y-3">
             <div className="flex justify-between gap-3">
