@@ -34,7 +34,7 @@ export function DirectorView() {
     }
 
     // 2. Grupos sin orientador
-    const groupsWithoutCounselor = groups.filter(g => !g.counselorId);
+    const groupsWithoutCounselor = groups.filter(g => !g.counselorId && !g.directorInChargeId);
     if (groupsWithoutCounselor.length > 0) {
       alerts.push(` INTEGRIDAD: ${groupsWithoutCounselor.length} grupos no tienen orientador.`);
     }
@@ -111,8 +111,9 @@ export function DirectorView() {
   const unattendedGroups = groupList.filter(group => {
     const counselor = staffList.find(u => u.id === group.counselorId);
     const hasSubstitute = !!group.tempCounselorId;
+    const directorInCharge = !!group.directorInChargeId;
     const isCounselorMissing = counselor?.gpsStatus === 'outside' || counselor?.gpsStatus === 'unknown';
-    return isCounselorMissing && !hasSubstitute;
+    return isCounselorMissing && !hasSubstitute && !directorInCharge;
   });
 
 
@@ -181,6 +182,26 @@ export function DirectorView() {
                   </div>
                 );
               })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* El director tiene control global y puede quedar formalmente a cargo de cualquier grupo.
+          El orientador titular, si existe, permanece registrado para conservar el historial. */}
+      {groupList.some(group => group.directorInChargeId) && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-black uppercase tracking-wide">Grupos a cargo del Director</CardTitle>
+            <CardDescription>Estos grupos pueden estar bajo responsabilidad directa del director aunque tengan o no orientador titular.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              {groupList.filter(group => group.directorInChargeId).map(group => (
+                <span key={group.id} className="rounded-full border bg-background px-3 py-1 text-xs font-semibold">
+                  {group.name}
+                </span>
+              ))}
             </div>
           </CardContent>
         </Card>
