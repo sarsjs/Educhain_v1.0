@@ -1,20 +1,6 @@
 {
   "indexes": [
     {
-      "collectionGroup": "attendance_tokens",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "groupId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "code",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "attendance_appeals",
       "queryScope": "COLLECTION",
       "fields": [
