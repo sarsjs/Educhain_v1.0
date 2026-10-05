@@ -1,11 +1,14 @@
+// src/lib/ble-attendance.ts
 'use client';
+
+import { Capacitor } from '@capacitor/core';
 
 export const EDUCHAIN_BLE_SERVICE_UUID = '7d3f1a20-7c2b-4f7f-9e13-2640d7c5a901';
 export const EDUCHAIN_BLE_SESSION_CHARACTERISTIC_UUID = '7d3f1a21-7c2b-4f7f-9e13-2640d7c5a901';
 
-export type BleDetection = {
+export type BleStudentDetection = {
   deviceId: string;
-  name: string | null;
+  studentId: string;
   rssi: number;
   detectedAt: number;
 };
@@ -16,6 +19,8 @@ export type BleAttendanceSession = {
   expiresAt: number;
 };
 
+let centralConnectedListener: { remove: () => Promise<void> } | null = null;
+let writeRequestListener: { remove: () => Promise<void> } | null = null;
 let scanListener: { remove: () => Promise<void> } | null = null;
 
 function randomSessionId(): string {
@@ -28,16 +33,20 @@ function textToBytes(value: string): number[] {
   return Array.from(new TextEncoder().encode(value));
 }
 
-async function getBle() {
-  if (typeof window === 'undefined') {
-    throw new Error('BLE solo está disponible en la aplicación móvil.');
-  }
+function bytesToText(value: number[]): string {
+  return new TextDecoder().decode(new Uint8Array(value));
+}
 
+async function getBle() {
+  if (typeof window === 'undefined' || !Capacitor.isNativePlatform()) {
+    throw new Error('El pase automático BLE requiere la aplicación móvil de EduChain.');
+  }
   const module = await import('@capgo/capacitor-bluetooth-low-energy');
   return module.BluetoothLowEnergy;
 }
 
 export async function startTeacherBleAttendance(
+  onStudentDetected: (detection: BleStudentDetection) => void,
   durationMs = 60_000,
 ): Promise<BleAttendanceSession> {
   const ble = await getBle();
@@ -49,22 +58,54 @@ export async function startTeacherBleAttendance(
 
   await ble.addGattService({
     service: EDUCHAIN_BLE_SERVICE_UUID,
-    characteristics: [
-      {
-        uuid: EDUCHAIN_BLE_SESSION_CHARACTERISTIC_UUID,
-        properties: {
-          broadcast: false,
-          read: true,
-          write: false,
-          writeWithoutResponse: false,
-          notify: false,
-          indicate: false,
-          authenticatedSignedWrites: false,
-          extendedProperties: false,
-        },
-        value: textToBytes(sessionId),
+    characteristics: [{
+      uuid: EDUCHAIN_BLE_SESSION_CHARACTERISTIC_UUID,
+      properties: {
+        broadcast: false,
+        read: true,
+        write: true,
+        writeWithoutResponse: false,
+        notify: false,
+        indicate: false,
+        authenticatedSignedWrites: false,
+        extendedProperties: false,
       },
-    ],
+      value: textToBytes(sessionId),
+    }],
+  });
+
+  centralConnectedListener = await ble.addListener('centralConnected', async ({ deviceId }) => {
+    try {
+      const { rssi } = await ble.readRssi({ deviceId });
+      console.debug('EduChain BLE central conectado', deviceId, rssi);
+    } catch (error) {
+      console.warn('No se pudo leer RSSI BLE', error);
+    }
+  });
+
+  writeRequestListener = await ble.addListener('gattCharacteristicWriteRequest', async (event) => {
+    if (
+      event.service.toLowerCase() !== EDUCHAIN_BLE_SERVICE_UUID.toLowerCase() ||
+      event.characteristic.toLowerCase() !== EDUCHAIN_BLE_SESSION_CHARACTERISTIC_UUID.toLowerCase()
+    ) return;
+
+    const studentId = bytesToText(event.value).trim();
+    if (!studentId) return;
+
+    let rssi = -999;
+    try {
+      const result = await ble.readRssi({ deviceId: event.deviceId });
+      rssi = result.rssi;
+    } catch {
+      // RSSI puede no estar disponible en todos los dispositivos.
+    }
+
+    onStudentDetected({
+      deviceId: event.deviceId,
+      studentId,
+      rssi,
+      detectedAt: Date.now(),
+    });
   });
 
   await ble.startAdvertising({
@@ -74,48 +115,61 @@ export async function startTeacherBleAttendance(
     includeTxPowerLevel: true,
   });
 
-  return {
-    sessionId,
-    startedAt,
-    expiresAt: startedAt + durationMs,
-  };
+  return { sessionId, startedAt, expiresAt: startedAt + durationMs };
 }
 
 export async function stopTeacherBleAttendance(): Promise<void> {
   const ble = await getBle();
   await ble.stopAdvertising();
   await ble.removeGattService({ service: EDUCHAIN_BLE_SERVICE_UUID });
+
+  if (centralConnectedListener) {
+    await centralConnectedListener.remove();
+    centralConnectedListener = null;
+  }
+  if (writeRequestListener) {
+    await writeRequestListener.remove();
+    writeRequestListener = null;
+  }
 }
 
-export async function startStudentBleScan(
-  onDetection: (detection: BleDetection) => void,
-): Promise<void> {
+export async function startStudentBlePresence(studentId: string): Promise<void> {
   const ble = await getBle();
 
   await ble.initialize({ mode: 'central' });
   await ble.requestPermissions();
 
-  if (scanListener) {
-    await scanListener.remove();
-  }
+  if (scanListener) await scanListener.remove();
 
-  scanListener = await ble.addListener('deviceScanned', ({ device }) => {
-    onDetection({
-      deviceId: device.deviceId,
-      name: device.name,
-      rssi: device.rssi,
-      detectedAt: Date.now(),
-    });
+  scanListener = await ble.addListener('deviceScanned', async ({ device }) => {
+    if (!device.serviceUuids?.some(
+      uuid => uuid.toLowerCase() === EDUCHAIN_BLE_SERVICE_UUID.toLowerCase()
+    )) return;
+
+    try {
+      await ble.stopScan();
+      await ble.connect({ deviceId: device.deviceId });
+      await ble.discoverServices({ deviceId: device.deviceId });
+      await ble.writeCharacteristic({
+        deviceId: device.deviceId,
+        service: EDUCHAIN_BLE_SERVICE_UUID,
+        characteristic: EDUCHAIN_BLE_SESSION_CHARACTERISTIC_UUID,
+        value: textToBytes(studentId),
+        type: 'withResponse',
+      });
+    } catch (error) {
+      console.warn('No se pudo enviar la presencia BLE', error);
+    }
   });
 
   await ble.startScan({
     services: [EDUCHAIN_BLE_SERVICE_UUID],
-    allowDuplicates: true,
+    allowDuplicates: false,
     timeout: 0,
   });
 }
 
-export async function stopStudentBleScan(): Promise<void> {
+export async function stopStudentBlePresence(): Promise<void> {
   const ble = await getBle();
   await ble.stopScan();
 
