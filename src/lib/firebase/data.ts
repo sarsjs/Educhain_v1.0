@@ -15,12 +15,29 @@ const fetchData = async <T>(fetchFunction: () => Promise<T[]>, entityName: strin
 
 // Temporary counselor coverage: the titular counselor remains unchanged.
 export const createSubstitutionRequest = async (request: Omit<SubstitutionRequest, 'id' | 'timestamp' | 'status'>) => {
+    if (!request.groupIds.length) throw new Error("Debes seleccionar al menos un grupo.");
+    if (request.startTime >= request.endTime) throw new Error("La hora de inicio debe ser menor que la hora de término.");
+    const day = new Date(request.date + 'T12:00:00').getDay();
+    if (day === 0 || day === 6) throw new Error("Las suplencias solo pueden programarse de lunes a viernes.");
+
     return await addDoc(collection(db, "substitution_requests"), {
         ...request,
         timestamp: serverTimestamp(),
         status: 'pending'
     });
 };
+
+export const fetchSubstitutionRequestsForCounselor = async (counselorId: string): Promise<SubstitutionRequest[]> => fetchData(async () => {
+    const [incoming, outgoing] = await Promise.all([
+        getDocs(query(collection(db, "substitution_requests"), where("toCounselorId", "==", counselorId))),
+        getDocs(query(collection(db, "substitution_requests"), where("fromCounselorId", "==", counselorId))),
+    ]);
+    const map = new Map<string, SubstitutionRequest>();
+    [...incoming.docs, ...outgoing.docs].forEach(item => {
+        map.set(item.id, { id: item.id, ...item.data() } as unknown as SubstitutionRequest);
+    });
+    return Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date) || b.startTime.localeCompare(a.startTime));
+}, 'counselor substitution requests');
 
 export const fetchSubstitutionRequests = async (toCounselorId: string): Promise<SubstitutionRequest[]> => fetchData(async () => {
     const q = query(collection(db, "substitution_requests"), where("toCounselorId", "==", toCounselorId));
@@ -51,7 +68,8 @@ export const handleSubstitutionRequest = async (
                 startTime: requestBody.startTime,
                 endTime: requestBody.endTime,
                 reason: requestBody.message || "Cobertura temporal entre orientadores.",
-                status: 'active',
+                status: coverageDateTime(requestBody.date, requestBody.startTime) <= new Date() &&
+                    new Date() <= coverageDateTime(requestBody.date, requestBody.endTime) ? 'active' : 'scheduled',
                 createdBy: requestBody.toCounselorId,
                 startsAt: Timestamp.fromDate(coverageDateTime(requestBody.date, requestBody.startTime)),
                 endsAt: Timestamp.fromDate(coverageDateTime(requestBody.date, requestBody.endTime)),
@@ -297,16 +315,44 @@ export const fetchGroupsByCounselor = async (counselorId: string): Promise<Group
     const q2 = query(collection(db, "groups"), where("tempCounselorId", "==", counselorId));
 
     const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
-
     const groupsMap = new Map<string, Group>();
 
     snap1.docs.forEach(doc => {
         groupsMap.set(doc.id, { id: doc.id, ...doc.data() } as unknown as Group);
     });
-
     snap2.docs.forEach(doc => {
         groupsMap.set(doc.id, { id: doc.id, ...doc.data() } as unknown as Group);
     });
+
+    // Una suplencia futura no da acceso antes de tiempo. Solo se agregan
+    // coberturas que ya comenzaron y siguen vigentes.
+    const now = new Date();
+    const today = getTodayDateKey();
+    const coverageSnap = await getDocs(query(
+        collection(db, "counselor_coverages"),
+        where("substituteCounselorId", "==", counselorId),
+        where("date", "==", today)
+    ));
+    const activeCoverages = coverageSnap.docs
+        .map(item => ({ id: item.id, ...item.data() } as CounselorCoverage))
+        .filter(coverage => {
+            if (coverage.status === 'cancelled' || coverage.status === 'expired') return false;
+            const start = coverage.startsAt?.toDate?.() ?? coverageDateTime(coverage.date, coverage.startTime);
+            const end = coverage.endsAt?.toDate?.() ?? coverageDateTime(coverage.date, coverage.endTime);
+            return now >= start && now <= end;
+        });
+
+    if (activeCoverages.length > 0) {
+        const coverageGroupIds = [...new Set(activeCoverages.map(c => c.groupId))];
+        const allGroups = await fetchGroups();
+        allGroups
+            .filter(group => coverageGroupIds.includes(group.id))
+            .forEach(group => groupsMap.set(group.id, {
+                ...group,
+                tempCounselorId: counselorId,
+                absenceStatus: { isActive: true, message: 'Suplencia activa programada' }
+            }));
+    }
 
     return Array.from(groupsMap.values());
 }, 'groups by counselor');
