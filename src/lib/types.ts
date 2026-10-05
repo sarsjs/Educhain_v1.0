@@ -104,6 +104,7 @@ export interface Attendance {
     teacherEvidenceAcknowledged?: boolean;
     teacherEvidenceAcknowledgedAt?: FieldValue;
     teacherEvidenceAcknowledgedBy?: string;
+    appealId?: string;
     appealResolved?: boolean;
     appealResolvedAt?: FieldValue;
     appealResolvedBy?: string;
