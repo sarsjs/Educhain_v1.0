@@ -25,6 +25,8 @@ export interface Group {
     semester: number;
     cycleId: string;
     counselorId: string;
+    /** Director que queda formalmente a cargo del grupo, sin quitar al orientador titular. */
+    directorInChargeId?: string;
     active?: boolean;
     tempCounselorId?: string; // ID del orientador suplente
     absenceStatus?: {
@@ -140,7 +142,7 @@ export interface SubstitutionRequest {
     date: string; // YYYY-MM-DD
     startTime: string; // HH:MM
     endTime: string; // HH:MM
-    status: 'pending' | 'accepted' | 'declined';
+    status: 'pending' | 'accepted' | 'declined' | 'cancelled';
     message?: string;
     timestamp: FieldValue;
 }
@@ -159,7 +161,7 @@ export interface CounselorCoverage {
     closedBy?: string;
     closingSummary?: string;
     reason?: string;
-    status: 'active' | 'cancelled' | 'expired';
+    status: 'scheduled' | 'active' | 'cancelled' | 'expired';
     createdBy: string;
     createdAt: FieldValue;
 }
