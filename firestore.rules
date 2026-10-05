@@ -286,7 +286,12 @@ service cloud.firestore {
       );
 
       allow update, delete: if request.auth != null &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['director', 'profesor'];
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['director', 'profesor'] ||
+         (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'orientador' &&
+          request.resource.data.appealResolved == true &&
+          request.resource.data.appealResolvedBy == request.auth.uid &&
+          get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.counselorId == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['present','source','recordedBy','recordedByRole','appealId','appealResolved','appealResolvedAt','appealResolvedBy','appealResolutionReason'])))
     }
 
     // Grades collection - read/write based on role
