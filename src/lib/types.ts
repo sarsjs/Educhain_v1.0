@@ -104,6 +104,19 @@ export interface Attendance {
     teacherEvidenceAcknowledged?: boolean;
     teacherEvidenceAcknowledgedAt?: FieldValue;
     teacherEvidenceAcknowledgedBy?: string;
+    appealResolved?: boolean;
+    appealResolvedAt?: FieldValue;
+    appealResolvedBy?: string;
+    appealResolutionReason?: string;
+}
+
+export type AttendanceAppealStatus = 'pending' | 'teacher_confirmed' | 'counselor_confirmed' | 'resolved' | 'rejected';
+export interface AttendanceAppeal {
+ id:string; attendanceId:string; studentId:string; teacherId:string; counselorId:string; subjectId:string; groupId:string; date:string;
+ status:AttendanceAppealStatus; studentMessage?:string; originalPresent:false; originalPresenceEvidence?:Attendance['presenceEvidence'];
+ originalGpsStatusAtCheck?:Attendance['gpsStatusAtCheck']; originalGpsDistanceMeters?:number; createdAt:FieldValue;
+ teacherConfirmedBy?:string; teacherConfirmedAt?:FieldValue; counselorConfirmedBy?:string; counselorConfirmedAt?:FieldValue;
+ resolvedAt?:FieldValue; resolvedBy?:string; resolution?:'present'|'rejected'; resolutionReason?:string;
 }
 
 export type RecipientFilter =
