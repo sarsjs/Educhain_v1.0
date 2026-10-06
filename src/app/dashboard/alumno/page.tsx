@@ -1,5 +1,7 @@
 'use client';
 
+// EduChain main APK build sync.
+
 import * as React from 'react';
 import { useAuth } from '@/context/auth-context';
 import {
