@@ -5,23 +5,22 @@ import { useAuth } from '@/context/auth-context';
 import {
   fetchGroupsByCounselor,
   fetchStudentsByGroup,
+  fetchAttendanceForDate,
+  getTodayDateKey,
 } from '@/lib/firebase/data';
-import type { Group, User } from '@/lib/types';
+import type { Attendance, Group, User } from '@/lib/types';
 import {
   Users,
   GraduationCap,
-  Bell,
   MapPin,
   School,
   Clock
 } from 'lucide-react';
 import { StatCard } from '@/components/dashboard/stat-card';
-import { MessagePanel } from '@/components/dashboard/message-panel';
 import { NotificationPanel } from '@/components/dashboard/notification-panel';
 import { RealTimeAttendance } from '@/components/dashboard/real-time-attendance';
 import { useToast } from '@/hooks/use-toast';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { SubstitutionManager } from '@/components/dashboard/substitution-manager';
@@ -35,24 +34,33 @@ export default function OrientadorPage() {
 
   const [groups, setGroups] = React.useState<Group[]>([]);
   const [students, setStudents] = React.useState<User[]>([]);
+  const [attendance, setAttendance] = React.useState<Attendance[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
 
   const loadCounselorDashboard = React.useCallback(async () => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setIsLoading(false);
+      return;
+    }
 
     try {
       setIsLoading(true);
       const fetchedGroups = await fetchGroupsByCounselor(user.id);
       setGroups(fetchedGroups);
 
-      // Fetch all students from all assigned groups
+      // Load students from the groups assigned to this counselor.
       const allStudentsPromises = fetchedGroups.map(g => fetchStudentsByGroup(g.id));
       const studentsInGroups = await Promise.all(allStudentsPromises);
-      setStudents(studentsInGroups.flat());
+      const assignedStudents = studentsInGroups.flat();
+      setStudents(assignedStudents);
 
+      // Load today's saved attendance, limited to this counselor's students.
+      const todaysAttendance = await fetchAttendanceForDate(getTodayDateKey());
+      const assignedStudentIds = new Set(assignedStudents.map(student => student.id));
+      setAttendance(todaysAttendance.filter(record => assignedStudentIds.has(record.studentId)));
     } catch (err) {
       console.error(err);
-      toast({ title: "Error", description: "No se pudo cargar el tablero.", variant: "destructive" });
+      toast({ title: 'Error', description: 'No se pudo cargar el tablero.', variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
@@ -107,7 +115,7 @@ export default function OrientadorPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Panel Izquierdo: Estado en Tiempo Real */}
         <div className="lg:col-span-2 space-y-6">
-          <RealTimeAttendance students={students} />
+          <RealTimeAttendance students={students} attendance={attendance} />
 
           {/* Grupos Rápidos */}
           <Card className="border-none shadow-md">
