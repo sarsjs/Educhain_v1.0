@@ -85,7 +85,6 @@ const navItems = {
     { href: '/dashboard/alumno/calificaciones', icon: GraduationCap, label: 'Mis Calificaciones' },
     { href: '/dashboard/alumno/calendario', icon: Calendar, label: 'Calendario' },
     { href: '/dashboard/alumno/credencial', icon: Contact, label: 'Mi Credencial' },
-    { href: '/dashboard/alumno/mensajes', icon: MessageSquare, label: 'Mensajes' },
   ],
 };
 
