@@ -106,6 +106,16 @@ function AttendanceSheet({ students, groupId, subjectId }: { students: Student[]
       <CardContent className="space-y-6">
         <TeacherBleAttendance students={students} onDetectedStudent={(studentId) => {
           setBleDetected(prev => ({ ...prev, [studentId]: true }));
+          const detectedStudent = students.find(student => student.id === studentId);
+          if (detectedStudent?.gpsStatus === 'outside') {
+            const accepted = window.confirm('ADVERTENCIA DE EDUCHAIN\\n\\nBluetooth detectó a este alumno, pero el último estado GPS disponible lo ubica FUERA DEL PLANTEL.\\n\\n¿Confirmas que está presente? Si continúas, quedará registrada tu confirmación para auditoría.');
+            if (!accepted) {
+              setAttendance(prev => ({ ...prev, [studentId]: false }));
+              setEvidenceAcknowledged(prev => ({ ...prev, [studentId]: false }));
+              return;
+            }
+            setEvidenceAcknowledged(prev => ({ ...prev, [studentId]: true }));
+          }
           setAttendance(prev => ({ ...prev, [studentId]: true }));
         }} />
 
