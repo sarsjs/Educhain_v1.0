@@ -42,7 +42,7 @@ function AttendanceSheet({ students, groupId, subjectId }: { students: Student[]
       const acknowledgedMap: Record<string, boolean> = {};
       students.forEach(student => {
         const record = existingRecords.find(r => r.studentId === student.id);
-        attendanceMap[student.id] = record ? record.present : true; // Default to present
+        attendanceMap[student.id] = record ? record.present : false; // Nunca marcar presentes por defecto: el profesor confirma la asistencia
         acknowledgedMap[student.id] = Boolean(record?.teacherEvidenceAcknowledged);
       });
       setAttendance(attendanceMap);
