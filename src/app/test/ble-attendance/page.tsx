@@ -65,7 +65,7 @@ export default function BleAttendanceTestPage() {
   React.useEffect(() => () => {
     void (async () => {
       if (role === 'teacher') await stopTeacherBleAttendance().catch(() => undefined);
-      if (role === 'student') await stopStudentBleScan().catch(() => undefined);
+      if (role === 'student') await stopStudentBlePresence().catch(() => undefined);
     })();
   }, [role]);
 
