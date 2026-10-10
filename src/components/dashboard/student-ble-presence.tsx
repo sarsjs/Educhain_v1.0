@@ -29,7 +29,7 @@ export function StudentBlePresence({ studentId }: { studentId: string }) {
       if (!isAutomaticRetry) {
         toast({
           title: 'Asistencia automática configurada',
-          description: 'Listo. EduChain recordará esta elección e intentará activarse automáticamente cuando abras la app.',
+          description: 'Listo. EduChain recordará esta elección y seguirá buscando el pase en segundo plano mientras Android mantenga activo el servicio.',
         });
       }
     } catch (error) {
@@ -83,7 +83,7 @@ export function StudentBlePresence({ studentId }: { studentId: string }) {
               Asistencia automática
             </CardTitle>
             <CardDescription>
-              Configúrala una vez. Después EduChain recordará tu elección e intentará buscar el pase del profesor al abrir la app, sin códigos ni activación diaria.
+              Configúrala una vez. Después EduChain recordará tu elección y buscará el pase del profesor en segundo plano, sin códigos ni activación diaria.
             </CardDescription>
           </div>
           <Badge variant={active ? 'default' : 'secondary'}>
@@ -98,7 +98,7 @@ export function StudentBlePresence({ studentId }: { studentId: string }) {
             : <><Bluetooth className='mr-2 h-4 w-4' />{starting ? 'Activando…' : configured ? 'Reintentar conexión' : 'Configurar una sola vez'}</>}
         </Button>
         <p className='text-xs text-muted-foreground'>
-          En Android, el servicio en segundo plano puede mostrar una notificación. El sistema puede detenerlo si fuerzas el cierre de EduChain o restringes su batería.
+          Android mostrará una notificación mientras la asistencia busca el pase. Si el sistema restringe la batería o revocas permisos, puede ser necesario reactivarla.
         </p>
       </CardContent>
     </Card>
