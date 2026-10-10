@@ -49,7 +49,9 @@ async function getBle() {
 /** Check first so an already-approved permission is not requested on every app launch. */
 async function ensureBlePermissions(ble: Awaited<ReturnType<typeof getBle>>): Promise<void> {
   let permissions = await ble.checkPermissions();
-  if (permissions.bluetooth !== 'granted') {
+  if (permissions.bluetooth !== 'granted' || permissions.location !== 'granted') {
+    // Android 11 and earlier need location permission for BLE scanning. On Android 12+
+    // the plugin requests Bluetooth permissions; an optional location status may remain prompt.
     permissions = await ble.requestPermissions();
   }
   if (permissions.bluetooth !== 'granted') {
