@@ -38,7 +38,7 @@ import {
 import { useAuth } from '@/context/auth-context';
 import { useToast } from "@/hooks/use-toast";
 import type { Group, User, Subject } from "@/lib/types";
-import { addGroup, fetchGroups, deleteGroup, fetchUsers, addSubject, fetchSubjects, deleteSubject, updateGroup, updateSubject, updateGroupAbsence, logActivity } from "@/lib/firebase/data";
+import { addGroup, fetchGroups, deleteGroup, fetchUsers, addSubject, fetchSubjects, deleteSubject, updateGroup, updateSubject, updateGroupAbsence, logActivity, fetchSchoolCycles, createSchoolCycle } from "@/lib/firebase/data";
 
 export default function EstructuraPage() {
   const [groupList, setGroupList] = React.useState<Group[]>([]);
@@ -82,10 +82,12 @@ export default function EstructuraPage() {
   const loadData = React.useCallback(async () => {
     setDataLoading(true);
     try {
-      const [groupsData, users, subjectsData] = await Promise.all([fetchGroups(), fetchUsers(), fetchSubjects()]);
+      const [groupsData, users, subjectsData, schoolCycles] = await Promise.all([fetchGroups(), fetchUsers(), fetchSubjects(), fetchSchoolCycles()]);
       setGroupList(groupsData);
       setStaffList(users);
       setSubjectList(subjectsData);
+      // Include legacy cycles referenced by existing groups so older records remain editable.
+      setCycleList(Array.from(new Set([...schoolCycles, ...groupsData.map((group) => group.cycleId).filter(Boolean)])));
     } catch (error) {
       console.error("Error loading Firebase data", error);
       toast({
@@ -103,12 +105,10 @@ export default function EstructuraPage() {
   }, [loadData]);
 
   React.useEffect(() => {
-    const uniqueCycles = Array.from(new Set(groupList.map((group) => group.cycleId))).filter(Boolean);
-    setCycleList(uniqueCycles);
-    if (!newGroupCycleId && uniqueCycles.length > 0) {
-      setNewGroupCycleId(uniqueCycles[0]);
+    if (!newGroupCycleId && cycleList.length > 0) {
+      setNewGroupCycleId(cycleList[0]);
     }
-  }, [groupList, newGroupCycleId]);
+  }, [cycleList, newGroupCycleId]);
 
   const handleCreateGroup = async () => {
     if (!newGroupSemester || !newGroupIdentifier || !newGroupCycleId || !newGroupCounselorId) {
@@ -239,15 +239,34 @@ export default function EstructuraPage() {
     }
   };
 
-  const handleCreateCycle = () => {
-    if (!newCycleName) {
+  const handleCreateCycle = async () => {
+    const cycleName = newCycleName.trim();
+    if (!cycleName) {
       toast({ title: "Datos incompletos", description: "Ingresa un nombre para el ciclo escolar.", variant: "destructive" });
       return;
     }
-    setCycleList((prev) => Array.from(new Set([...prev, newCycleName])));
-    setNewCycleName("");
-    setAddCycleOpen(false);
-    toast({ title: "Ciclo escolar creado", description: `El ciclo ${newCycleName} fue creado.` });
+    if (cycleName.includes("/")) {
+      toast({ title: "Nombre no válido", description: "El nombre del ciclo no puede contener /.", variant: "destructive" });
+      return;
+    }
+    if (cycleList.some((cycle) => cycle.toLocaleLowerCase() === cycleName.toLocaleLowerCase())) {
+      toast({ title: "El ciclo ya existe", description: "Usa un nombre diferente o selecciona el ciclo existente.", variant: "destructive" });
+      return;
+    }
+    try {
+      setDataLoading(true);
+      await createSchoolCycle(cycleName);
+      setNewGroupCycleId(cycleName);
+      setNewCycleName("");
+      setAddCycleOpen(false);
+      toast({ title: "Ciclo escolar guardado", description: `El ciclo ${cycleName} ya está guardado en Firebase.` });
+      await loadData();
+    } catch (error) {
+      console.error("Error creating school cycle", error);
+      toast({ title: "No se pudo guardar el ciclo", description: "Verifica los permisos de Firebase e inténtalo nuevamente.", variant: "destructive" });
+    } finally {
+      setDataLoading(false);
+    }
   };
 
   const handleCreateSubject = async () => {
