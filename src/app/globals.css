@@ -82,3 +82,46 @@
     @apply bg-background text-foreground;
   }
 }
+
+
+/* Safe areas: Android/iOS WebView and mobile browsers */
+html {
+  min-height: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  min-height: 100dvh;
+  margin: 0;
+  overscroll-behavior-y: contain;
+}
+
+.educhain-app-header {
+  box-sizing: border-box;
+  height: auto;
+  min-height: calc(3.5rem + env(safe-area-inset-top, 0px));
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
+  padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
+  flex-wrap: nowrap;
+}
+
+.educhain-app-main {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+  padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
+  padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 380px) {
+  .educhain-app-header h1 {
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+  }
+  .educhain-app-header .educhain-signout {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+    font-size: 0.75rem;
+  }
+}
