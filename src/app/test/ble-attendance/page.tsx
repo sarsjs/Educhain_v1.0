@@ -2,18 +2,18 @@
 
 import * as React from 'react';
 import {
-  startStudentBleScan,
+  startStudentBlePresence,
   startTeacherBleAttendance,
-  stopStudentBleScan,
+  stopStudentBlePresence,
   stopTeacherBleAttendance,
-  type BleDetection,
+  type BleStudentDetection,
   type BleAttendanceSession,
 } from '@/lib/ble-attendance';
 
 export default function BleAttendanceTestPage() {
   const [role, setRole] = React.useState<'teacher' | 'student' | null>(null);
   const [session, setSession] = React.useState<BleAttendanceSession | null>(null);
-  const [detections, setDetections] = React.useState<BleDetection[]>([]);
+  const [detections, setDetections] = React.useState<BleStudentDetection[]>([]);
   const [error, setError] = React.useState('');
   const [running, setRunning] = React.useState(false);
   const [testIdentity, setTestIdentity] = React.useState('teacher');
@@ -27,7 +27,9 @@ export default function BleAttendanceTestPage() {
   const startTeacher = async () => {
     setError('');
     try {
-      const next = await startTeacherBleAttendance(60_000);
+      const next = await startTeacherBleAttendance((detection) => {
+        setDetections((current) => [detection, ...current.filter((item) => item.deviceId !== detection.deviceId)].slice(0, 20));
+      }, 60_000);
       setRole('teacher');
       setSession(next);
       setRunning(true);
@@ -40,12 +42,7 @@ export default function BleAttendanceTestPage() {
     setError('');
     setDetections([]);
     try {
-      await startStudentBleScan((detection) => {
-        setDetections((current) => {
-          const next = [detection, ...current.filter((item) => item.deviceId !== detection.deviceId)];
-          return next.slice(0, 20);
-        });
-      });
+      await startStudentBlePresence(testIdentity);
       setRole('student');
       setRunning(true);
     } catch (e) {
@@ -56,7 +53,7 @@ export default function BleAttendanceTestPage() {
   const stop = async () => {
     try {
       if (role === 'teacher') await stopTeacherBleAttendance();
-      if (role === 'student') await stopStudentBleScan();
+      if (role === 'student') await stopStudentBlePresence();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo detener BLE.');
     } finally {
@@ -159,7 +156,7 @@ export default function BleAttendanceTestPage() {
                     {detections.map((detection) => (
                       <div key={detection.deviceId} className="rounded-xl bg-slate-950 p-4">
                         <div className="flex items-center justify-between">
-                          <span className="font-bold">{detection.name || 'EduChain Pase'}</span>
+                          <span className="font-bold">{detection.studentId || 'Alumno detectado'}</span>
                           <span className="text-sm text-emerald-400">{detection.rssi} dBm</span>
                         </div>
                         <code className="mt-1 block break-all text-[10px] text-slate-600">
