@@ -1,7 +1,12 @@
 // src/lib/ble-attendance.ts
 'use client';
 
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
+
+const BleBackgroundAttendance = registerPlugin<{
+  startStudentScan(options: { studentId: string }): Promise<{ started: boolean }>;
+  stopStudentScan(): Promise<void>;
+}>('BleBackgroundAttendance');
 
 export const EDUCHAIN_BLE_SERVICE_UUID = '7d3f1a20-7c2b-4f7f-9e13-2640d7c5a901';
 export const EDUCHAIN_BLE_SESSION_CHARACTERISTIC_UUID = '7d3f1a21-7c2b-4f7f-9e13-2640d7c5a901';
@@ -153,6 +158,13 @@ export async function startStudentBlePresence(studentId: string): Promise<void> 
   await ble.initialize({ mode: 'central' });
   await ensureBlePermissions(ble);
 
+  if (Capacitor.getPlatform() === 'android') {
+    // Native foreground service keeps scanning even when Android backgrounds the WebView.
+    await BleBackgroundAttendance.startStudentScan({ studentId });
+    studentBle = ble;
+    return;
+  }
+
   if (scanListener) await scanListener.remove();
 
   scanListener = await ble.addListener('deviceScanned', async ({ device }) => {
@@ -201,6 +213,16 @@ export async function startStudentBlePresence(studentId: string): Promise<void> 
 }
 
 export async function stopStudentBlePresence(): Promise<void> {
+  if (Capacitor.getPlatform() === 'android') {
+    await BleBackgroundAttendance.stopStudentScan();
+    if (scanListener) {
+      await scanListener.remove();
+      scanListener = null;
+    }
+    studentBle = null;
+    return;
+  }
+
   const ble = studentBle ?? await getBle();
   await ble.stopScan();
 
