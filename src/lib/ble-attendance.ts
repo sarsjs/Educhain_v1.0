@@ -1,7 +1,12 @@
 // src/lib/ble-attendance.ts
 'use client';
 
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
+
+const BleBackgroundAttendance = registerPlugin<{
+  startStudentScan(options: { studentId: string }): Promise<{ started: boolean }>;
+  stopStudentScan(): Promise<void>;
+}>('BleBackgroundAttendance');
 
 export const EDUCHAIN_BLE_SERVICE_UUID = '7d3f1a20-7c2b-4f7f-9e13-2640d7c5a901';
 export const EDUCHAIN_BLE_SESSION_CHARACTERISTIC_UUID = '7d3f1a21-7c2b-4f7f-9e13-2640d7c5a901';
@@ -22,6 +27,7 @@ export type BleAttendanceSession = {
 let centralConnectedListener: { remove: () => Promise<void> } | null = null;
 let writeRequestListener: { remove: () => Promise<void> } | null = null;
 let scanListener: { remove: () => Promise<void> } | null = null;
+let studentBle: Awaited<ReturnType<typeof getBle>> | null = null;
 
 function randomSessionId(): string {
   const bytes = new Uint8Array(16);
@@ -45,6 +51,20 @@ async function getBle() {
   return module.BluetoothLowEnergy;
 }
 
+/** Check first so an already-approved permission is not requested on every app launch. */
+async function ensureBlePermissions(ble: Awaited<ReturnType<typeof getBle>>): Promise<void> {
+  let permissions = await ble.checkPermissions();
+  if (permissions.bluetooth !== 'granted' || permissions.location !== 'granted') {
+    // Android 11 and earlier need location permission for BLE scanning. On Android 12+
+    // the plugin requests Bluetooth permissions; an optional location status may remain prompt.
+    permissions = await ble.requestPermissions();
+  }
+  if (permissions.bluetooth !== 'granted') {
+    throw new Error('Necesitas permitir Bluetooth para activar la asistencia automática. Revisa los permisos de EduChain en Ajustes.');
+  }
+}
+
+
 export async function startTeacherBleAttendance(
   onStudentDetected: (detection: BleStudentDetection) => void,
   durationMs = 60_000,
@@ -54,7 +74,7 @@ export async function startTeacherBleAttendance(
   const sessionId = randomSessionId();
 
   await ble.initialize({ mode: 'peripheral' });
-  await ble.requestPermissions();
+  await ensureBlePermissions(ble);
 
   await ble.addGattService({
     service: EDUCHAIN_BLE_SERVICE_UUID,
@@ -122,7 +142,6 @@ export async function stopTeacherBleAttendance(): Promise<void> {
   const ble = await getBle();
   await ble.stopAdvertising();
   await ble.removeGattService({ service: EDUCHAIN_BLE_SERVICE_UUID });
-
   if (centralConnectedListener) {
     await centralConnectedListener.remove();
     centralConnectedListener = null;
@@ -137,7 +156,14 @@ export async function startStudentBlePresence(studentId: string): Promise<void> 
   const ble = await getBle();
 
   await ble.initialize({ mode: 'central' });
-  await ble.requestPermissions();
+  await ensureBlePermissions(ble);
+
+  if (Capacitor.getPlatform() === 'android') {
+    // Native foreground service keeps scanning even when Android backgrounds the WebView.
+    await BleBackgroundAttendance.startStudentScan({ studentId });
+    studentBle = ble;
+    return;
+  }
 
   if (scanListener) await scanListener.remove();
 
@@ -157,8 +183,24 @@ export async function startStudentBlePresence(studentId: string): Promise<void> 
         value: textToBytes(studentId),
         type: 'withResponse',
       });
+      try { await ble.disconnect({ deviceId: device.deviceId }); } catch (disconnectError) { console.warn('No se pudo cerrar la conexión BLE', disconnectError); }
+      // Resume scanning so later classes can be detected without another student action.
+      await ble.startScan({
+        services: [EDUCHAIN_BLE_SERVICE_UUID],
+        allowDuplicates: false,
+        timeout: 0,
+      });
     } catch (error) {
       console.warn('No se pudo enviar la presencia BLE', error);
+      try {
+        await ble.startScan({
+          services: [EDUCHAIN_BLE_SERVICE_UUID],
+          allowDuplicates: false,
+          timeout: 0,
+        });
+      } catch (scanError) {
+        console.warn('No se pudo reanudar la búsqueda BLE', scanError);
+      }
     }
   });
 
@@ -167,14 +209,26 @@ export async function startStudentBlePresence(studentId: string): Promise<void> 
     allowDuplicates: false,
     timeout: 0,
   });
+  studentBle = ble;
 }
 
 export async function stopStudentBlePresence(): Promise<void> {
-  const ble = await getBle();
+  if (Capacitor.getPlatform() === 'android') {
+    await BleBackgroundAttendance.stopStudentScan();
+    if (scanListener) {
+      await scanListener.remove();
+      scanListener = null;
+    }
+    studentBle = null;
+    return;
+  }
+
+  const ble = studentBle ?? await getBle();
   await ble.stopScan();
 
   if (scanListener) {
     await scanListener.remove();
     scanListener = null;
   }
+  studentBle = null;
 }

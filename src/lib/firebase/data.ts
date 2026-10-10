@@ -305,6 +305,29 @@ export const fetchStudentByEmail = async (email: string): Promise<User | null> =
     return null;
 };
 
+// School cycles are persisted independently from groups so they exist before the first group is created.
+export const fetchSchoolCycles = async (): Promise<string[]> => fetchData(async () => {
+    const snapshot = await getDocs(collection(db, "school_cycles"));
+    return snapshot.docs
+        .map(item => String(item.data().name || item.id))
+        .filter(Boolean)
+        .sort((a, b) => b.localeCompare(a, "es", { numeric: true }));
+}, 'school cycles');
+
+export const createSchoolCycle = async (name: string) => {
+    const normalizedName = name.trim();
+    if (!normalizedName) throw new Error("El nombre del ciclo escolar es obligatorio.");
+    if (normalizedName.includes("/")) throw new Error("El nombre del ciclo no puede contener /.");
+    const cycleRef = doc(db, "school_cycles", normalizedName);
+    const existing = await getDoc(cycleRef);
+    if (existing.exists()) throw new Error("Ya existe un ciclo escolar con ese nombre.");
+    await setDoc(cycleRef, {
+        name: normalizedName,
+        createdAt: serverTimestamp(),
+    });
+    return cycleRef.id;
+};
+
 export const fetchGroups = async (): Promise<Group[]> => fetchData(async () => {
     const querySnapshot = await getDocs(collection(db, "groups"));
     return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as Group));

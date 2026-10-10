@@ -42,7 +42,7 @@ function AttendanceSheet({ students, groupId, subjectId }: { students: Student[]
       const acknowledgedMap: Record<string, boolean> = {};
       students.forEach(student => {
         const record = existingRecords.find(r => r.studentId === student.id);
-        attendanceMap[student.id] = record ? record.present : true; // Default to present
+        attendanceMap[student.id] = record ? record.present : false; // Nunca marcar presentes por defecto: el profesor confirma la asistencia
         acknowledgedMap[student.id] = Boolean(record?.teacherEvidenceAcknowledged);
       });
       setAttendance(attendanceMap);
@@ -106,6 +106,16 @@ function AttendanceSheet({ students, groupId, subjectId }: { students: Student[]
       <CardContent className="space-y-6">
         <TeacherBleAttendance students={students} onDetectedStudent={(studentId) => {
           setBleDetected(prev => ({ ...prev, [studentId]: true }));
+          const detectedStudent = students.find(student => student.id === studentId);
+          if (detectedStudent?.gpsStatus === 'outside') {
+            const accepted = window.confirm('ADVERTENCIA DE EDUCHAIN\\n\\nBluetooth detectó a este alumno, pero el último estado GPS disponible lo ubica FUERA DEL PLANTEL.\\n\\n¿Confirmas que está presente? Si continúas, quedará registrada tu confirmación para auditoría.');
+            if (!accepted) {
+              setAttendance(prev => ({ ...prev, [studentId]: false }));
+              setEvidenceAcknowledged(prev => ({ ...prev, [studentId]: false }));
+              return;
+            }
+            setEvidenceAcknowledged(prev => ({ ...prev, [studentId]: true }));
+          }
           setAttendance(prev => ({ ...prev, [studentId]: true }));
         }} />
 

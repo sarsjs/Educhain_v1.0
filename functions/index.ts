@@ -31,7 +31,7 @@ export const createUser = functions.region('us-central1').https.onCall(async (da
 
   const { name, email, role, groupId, password } = data;
 
-  if (callerRole !== 'director') {
+  if (callerRole !== 'director' && callerRole !== 'admin') {
     // El orientador puede crear profesores y alumnos dentro de la operación académica.
     if (callerRole === 'orientador' && (role === 'estudiante' || role === 'profesor')) {
       // Permitido
@@ -146,7 +146,7 @@ export const deleteUser = functions.region('us-central1').https.onCall(async (da
 
   // El director puede borrar cualquier cuenta; el orientador puede retirar
   // profesores y alumnos desde la gestión académica.
-  if (callerRole !== 'director') {
+  if (callerRole !== 'director' && callerRole !== 'admin') {
     if (callerRole === 'orientador' && (targetRole === 'estudiante' || targetRole === 'profesor')) {
       // Permitido
     } else {
