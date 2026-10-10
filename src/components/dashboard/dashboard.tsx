@@ -13,7 +13,6 @@ import {
   School,
   Users,
   ClipboardList,
-  MessageSquare,
   ShieldCheck,
   Contact,
   Settings,
@@ -57,7 +56,6 @@ const navItems = {
     { href: '/dashboard/director/calendario', icon: Calendar, label: 'Calendario' },
     { href: '/dashboard/director/planeacion', icon: Calendar, label: 'Planeación académica' },
     { href: '/dashboard/director/bitacora', icon: Clock, label: 'Bitácora' },
-    { href: '/dashboard/director/mensajes', icon: MessageSquare, label: 'Mensajes' },
   ],
   orientador: [
     { href: '/dashboard/orientador', icon: Home, label: 'Panel Principal' },
@@ -66,7 +64,6 @@ const navItems = {
     { href: '/dashboard/orientador/calendario', icon: Calendar, label: 'Calendario' },
     { href: '/dashboard/orientador/planeacion', icon: Calendar, label: 'Planeación académica' },
     { href: '/dashboard/orientador/materias', icon: BookCopy, label: 'Materias' },
-    { href: '/dashboard/orientador/mensajes', icon: MessageSquare, label: 'Mensajes' },
   ],
   profesor: [
     { href: '/dashboard/profesor', icon: LayoutGrid, label: 'Mis Clases' },
@@ -74,7 +71,6 @@ const navItems = {
     { href: '/dashboard/profesor/calificaciones', icon: GraduationCap, label: 'Calificaciones' },
     { href: '/dashboard/profesor/calendario', icon: Calendar, label: 'Calendario' },
     { href: '/dashboard/profesor/horario', icon: Calendar, label: 'Mi Horario' },
-    { href: '/dashboard/profesor/mensajes', icon: MessageSquare, label: 'Mensajes' },
   ],
   alumno: [
     { href: '/dashboard/alumno', icon: LayoutGrid, label: 'Panel Principal' },
@@ -82,7 +78,6 @@ const navItems = {
     { href: '/dashboard/alumno/calificaciones', icon: GraduationCap, label: 'Mis Calificaciones' },
     { href: '/dashboard/alumno/calendario', icon: Calendar, label: 'Calendario' },
     { href: '/dashboard/alumno/credencial', icon: Contact, label: 'Mi Credencial' },
-    { href: '/dashboard/alumno/mensajes', icon: MessageSquare, label: 'Mensajes' },
   ],
   estudiante: [
     { href: '/dashboard/alumno', icon: LayoutGrid, label: 'Panel Principal' },
