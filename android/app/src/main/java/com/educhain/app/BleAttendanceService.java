@@ -68,7 +68,7 @@ public class BleAttendanceService extends Service {
                 try { connectedGatt.disconnect(); connectedGatt.close(); } catch (Exception ignored) {}
                 connectedGatt = null;
             }
-            stopForeground(STOP_FOREGROUND_REMOVE);
+            stopForeground(true);
             stopSelf();
             return START_NOT_STICKY;
         }
