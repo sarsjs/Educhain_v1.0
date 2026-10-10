@@ -27,7 +27,6 @@ import {
   ShieldCheck,
   GraduationCap,
   CheckCircle2,
-  MessageSquare,
   BookOpen,
   Trophy
 } from 'lucide-react';
@@ -159,12 +158,6 @@ export default function AlumnoPage() {
           value={stats?.attendanceRate || '0%'}
           icon={CheckCircle2}
           description="Presencia en plantel"
-        />
-        <StatCard
-          title="Mensajes"
-          value="0"
-          icon={MessageSquare}
-          description="Nuevas notificaciones"
         />
       </div>
 
