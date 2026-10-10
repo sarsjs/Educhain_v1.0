@@ -42,6 +42,7 @@ public class BleAttendanceService extends Service {
 
     private static final String CHANNEL_ID = "educhain_ble_attendance";
     private static final int NOTIFICATION_ID = 2640;
+    private static final String PREFS_NAME = "educhain_ble_attendance";
     private static final UUID SERVICE_UUID = UUID.fromString("7d3f1a20-7c2b-4f7f-9e13-2640d7c5a901");
     private static final UUID CHARACTERISTIC_UUID = UUID.fromString("7d3f1a21-7c2b-4f7f-9e13-2640d7c5a901");
 
@@ -54,12 +55,14 @@ public class BleAttendanceService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        studentId = getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString(EXTRA_STUDENT_ID, null);
         createNotificationChannel();
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null && ACTION_STOP.equals(intent.getAction())) {
+            getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().remove(EXTRA_STUDENT_ID).apply();
             stopScanning();
             if (connectedGatt != null) {
                 try { connectedGatt.disconnect(); connectedGatt.close(); } catch (Exception ignored) {}
@@ -74,6 +77,7 @@ public class BleAttendanceService extends Service {
             String requestedStudentId = intent.getStringExtra(EXTRA_STUDENT_ID);
             if (requestedStudentId != null && !requestedStudentId.trim().isEmpty()) {
                 studentId = requestedStudentId.trim();
+                getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().putString(EXTRA_STUDENT_ID, studentId).apply();
             }
         }
 
@@ -111,12 +115,22 @@ public class BleAttendanceService extends Service {
     }
 
     private void startScanning() {
-        if (studentId == null || studentId.isEmpty() || scanning || !hasBluetoothPermissions()) return;
+        if (studentId == null || studentId.isEmpty() || scanning) return;
+        if (!hasBluetoothPermissions()) {
+            handler.postDelayed(this::startScanning, 5000);
+            return;
+        }
         BluetoothManager manager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
         BluetoothAdapter adapter = manager == null ? null : manager.getAdapter();
-        if (adapter == null || !adapter.isEnabled()) return;
+        if (adapter == null || !adapter.isEnabled()) {
+            handler.postDelayed(this::startScanning, 5000);
+            return;
+        }
         scanner = adapter.getBluetoothLeScanner();
-        if (scanner == null) return;
+        if (scanner == null) {
+            handler.postDelayed(this::startScanning, 5000);
+            return;
+        }
 
         ScanFilter filter = new ScanFilter.Builder().setServiceUuid(new ParcelUuid(SERVICE_UUID)).build();
         ScanSettings settings = new ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build();
@@ -125,6 +139,7 @@ public class BleAttendanceService extends Service {
             scanning = true;
         } catch (SecurityException | IllegalStateException error) {
             scanning = false;
+            handler.postDelayed(this::startScanning, 5000);
         }
     }
 
