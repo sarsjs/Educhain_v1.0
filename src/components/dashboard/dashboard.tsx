@@ -175,7 +175,7 @@ function AppHeader({
   signOut: () => Promise<void>;
 }) {
   return (
-    <header className="flex min-w-0 h-14 items-center gap-2 border-b bg-card px-3 sm:gap-4 sm:px-4 lg:h-[60px] lg:px-6">
+    <header className="educhain-app-header flex min-w-0 items-center gap-2 border-b bg-card sm:gap-4 sm:px-4 lg:px-6">
       <SidebarTrigger className="md:hidden" />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
@@ -184,7 +184,7 @@ function AppHeader({
       </div>
       <div className="flex shrink-0 items-center gap-2 sm:gap-4">
         <ModeToggle />
-        <Button onClick={signOut} variant="outline" className="px-3 sm:px-4">Cerrar Sesión</Button>
+        <Button onClick={signOut} variant="outline" className="educhain-signout px-3 sm:px-4">Cerrar Sesión</Button>
       </div>
     </header>
   )
@@ -237,7 +237,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
             title={title}
             signOut={signOut}
           />
-          <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-muted/40 p-3 sm:p-4 lg:p-8">
+          <main className="educhain-app-main min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-muted/40 p-3 sm:p-4 lg:p-8">
             {children}
           </main>
         </SidebarInset>
