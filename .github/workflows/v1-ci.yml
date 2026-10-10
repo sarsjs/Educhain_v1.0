@@ -3,6 +3,7 @@ name: EduChain V1 CI
 on:
   push:
     branches:
+      - main
       - v1-funcional
       - feature/ble-auto-attendance
   pull_request:
