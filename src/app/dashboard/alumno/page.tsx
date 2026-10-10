@@ -12,9 +12,10 @@ import {
   fetchUsers,
   fetchUserById,
   fetchGroups,
+  fetchAttendanceByStudent,
   logActivity
 } from '@/lib/firebase/data';
-import type { Student, TimetableEntry, Subject, Grade, Group, User } from '@/lib/types';
+import type { Student, TimetableEntry, Subject, Grade, Group, User, Attendance } from '@/lib/types';
 import { StudentSchedule } from '@/components/dashboard/student-schedule';
 import { StudentGrades } from '@/components/dashboard/student-grades';
 import { useAppConfig } from '@/context/config-context';
@@ -42,6 +43,7 @@ export default function AlumnoPage() {
   const [schedule, setSchedule] = React.useState<TimetableEntry[]>([]);
   const [subjects, setSubjects] = React.useState<Subject[]>([]);
   const [grades, setGrades] = React.useState<Grade[]>([]);
+  const [attendanceRecords, setAttendanceRecords] = React.useState<Attendance[]>([]);
   const [group, setGroup] = React.useState<Group | null>(null);
   const [tempCounselor, setTempCounselor] = React.useState<User | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -69,6 +71,8 @@ export default function AlumnoPage() {
           return;
         }
         setStudent(currentStudent);
+        const studentAttendance = await fetchAttendanceByStudent(currentStudent.id);
+        setAttendanceRecords(studentAttendance);
 
         const allSubjects = await fetchSubjects();
         setSubjects(allSubjects);
@@ -120,9 +124,11 @@ export default function AlumnoPage() {
       average: avg,
       completedSubjects: validGrades.length,
       totalSubjects: subjects.length,
-      attendanceRate: '92%' // Mock para visualización
+      attendanceRate: attendanceRecords.length > 0
+        ? `${Math.round((attendanceRecords.filter(record => record.present === true).length / attendanceRecords.length) * 100)}%`
+        : '—'
     };
-  }, [student, grades, subjects]);
+  }, [student, grades, subjects, attendanceRecords]);
 
 
 
