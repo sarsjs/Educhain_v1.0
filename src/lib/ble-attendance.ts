@@ -57,19 +57,6 @@ async function ensureBlePermissions(ble: Awaited<ReturnType<typeof getBle>>): Pr
   }
 }
 
-/** Android foreground notification helps keep BLE work alive while the app is backgrounded. */
-async function startBleForegroundService(
-  ble: Awaited<ReturnType<typeof getBle>>,
-  role: 'student' | 'teacher',
-): Promise<void> {
-  if (Capacitor.getPlatform() !== 'android') return;
-  await ble.startForegroundService({
-    title: 'EduChain · asistencia automática',
-    body: role === 'student'
-      ? 'Buscando el pase de lista del profesor cercano.'
-      : 'Pase de lista Bluetooth activo.',
-  });
-}
 
 export async function startTeacherBleAttendance(
   onStudentDetected: (detection: BleStudentDetection) => void,
@@ -134,7 +121,6 @@ export async function startTeacherBleAttendance(
     });
   });
 
-  await startBleForegroundService(ble, 'teacher');
   await ble.startAdvertising({
     name: 'EduChain Pase',
     services: [EDUCHAIN_BLE_SERVICE_UUID],
@@ -149,10 +135,6 @@ export async function stopTeacherBleAttendance(): Promise<void> {
   const ble = await getBle();
   await ble.stopAdvertising();
   await ble.removeGattService({ service: EDUCHAIN_BLE_SERVICE_UUID });
-  if (Capacitor.getPlatform() === 'android') {
-    try { await ble.stopForegroundService(); } catch (error) { console.warn('No se pudo detener el servicio BLE', error); }
-  }
-
   if (centralConnectedListener) {
     await centralConnectedListener.remove();
     centralConnectedListener = null;
@@ -187,6 +169,7 @@ export async function startStudentBlePresence(studentId: string): Promise<void> 
         value: textToBytes(studentId),
         type: 'withResponse',
       });
+      try { await ble.disconnect({ deviceId: device.deviceId }); } catch (disconnectError) { console.warn('No se pudo cerrar la conexión BLE', disconnectError); }
       // Resume scanning so later classes can be detected without another student action.
       await ble.startScan({
         services: [EDUCHAIN_BLE_SERVICE_UUID],
@@ -207,7 +190,6 @@ export async function startStudentBlePresence(studentId: string): Promise<void> 
     }
   });
 
-  await startBleForegroundService(ble, 'student');
   await ble.startScan({
     services: [EDUCHAIN_BLE_SERVICE_UUID],
     allowDuplicates: false,
@@ -223,9 +205,6 @@ export async function stopStudentBlePresence(): Promise<void> {
   if (scanListener) {
     await scanListener.remove();
     scanListener = null;
-  }
-  if (Capacitor.getPlatform() === 'android') {
-    try { await ble.stopForegroundService(); } catch (error) { console.warn('No se pudo detener el servicio BLE', error); }
   }
   studentBle = null;
 }
